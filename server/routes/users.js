@@ -1,0 +1,103 @@
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const { db, getSetting, setSetting } = require('../db');
+const { requireAdmin } = require('../middleware/auth');
+
+const router = express.Router();
+
+const USER_FIELDS = 'id, username, role, display_name, twilio_identity, phone_number, created_at';
+
+// All routes here are admin-only: agent identities, the "Call My Phone" number, and the
+// transfer-target / Vapi settings are all admin-controlled configuration, not something an
+// agent can self-serve.
+router.use(requireAdmin);
+
+router.get('/', (req, res) => {
+  res.json(db.prepare(`SELECT ${USER_FIELDS} FROM users ORDER BY username`).all());
+});
+
+router.post('/', (req, res) => {
+  const { username, password, role, display_name, phone_number } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: 'username and password are required' });
+  }
+  if (role && !['admin', 'agent'].includes(role)) {
+    return res.status(400).json({ error: 'role must be "admin" or "agent"' });
+  }
+
+  const hash = bcrypt.hashSync(password, 10);
+  const twilioIdentity = `agent-${username}`;
+  try {
+    const info = db
+      .prepare(
+        `INSERT INTO users (username, password_hash, role, display_name, twilio_identity, phone_number)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(username, hash, role || 'agent', display_name || username, twilioIdentity, phone_number || null);
+    res.status(201).json(db.prepare(`SELECT ${USER_FIELDS} FROM users WHERE id = ?`).get(info.lastInsertRowid));
+  } catch (err) {
+    if (String(err.message).includes('UNIQUE')) {
+      return res.status(409).json({ error: 'Username already exists' });
+    }
+    throw err;
+  }
+});
+
+// NOTE: the /settings routes must be declared before the /:id route below — otherwise
+// Express matches "settings" as an :id param on PUT (GET has no conflicting /:id route,
+// but keep them together here so this ordering requirement isn't easy to break again).
+router.get('/settings', (req, res) => {
+  res.json({
+    transfer_target_name: getSetting('transfer_target_name', ''),
+    transfer_target_phone: getSetting('transfer_target_phone', ''),
+    vapi_assistant_id: getSetting('vapi_assistant_id', ''),
+    vapi_assistant_name: getSetting('vapi_assistant_name', ''),
+    vapi_phone_number_id: getSetting('vapi_phone_number_id', ''),
+  });
+});
+
+router.put('/settings', (req, res) => {
+  const {
+    transfer_target_name,
+    transfer_target_phone,
+    vapi_assistant_id,
+    vapi_assistant_name,
+    vapi_phone_number_id,
+  } = req.body || {};
+
+  if (transfer_target_name !== undefined) setSetting('transfer_target_name', transfer_target_name);
+  if (transfer_target_phone !== undefined) setSetting('transfer_target_phone', transfer_target_phone);
+  if (vapi_assistant_id !== undefined) setSetting('vapi_assistant_id', vapi_assistant_id);
+  if (vapi_assistant_name !== undefined) setSetting('vapi_assistant_name', vapi_assistant_name);
+  if (vapi_phone_number_id !== undefined) setSetting('vapi_phone_number_id', vapi_phone_number_id);
+
+  res.json({ ok: true });
+});
+
+// Admin-only update — this is the sole write path for phone_number ("Call My Phone" number)
+// and role; there is no agent-facing endpoint that can touch these fields.
+router.put('/:id', (req, res) => {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const { display_name, phone_number, role, password } = req.body || {};
+  if (role && !['admin', 'agent'].includes(role)) {
+    return res.status(400).json({ error: 'role must be "admin" or "agent"' });
+  }
+
+  db.prepare(
+    `UPDATE users SET
+       display_name = COALESCE(?, display_name),
+       phone_number = COALESCE(?, phone_number),
+       role = COALESCE(?, role)
+     WHERE id = ?`
+  ).run(display_name, phone_number, role, user.id);
+
+  if (password) {
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), user.id);
+  }
+
+  res.json(db.prepare(`SELECT ${USER_FIELDS} FROM users WHERE id = ?`).get(user.id));
+});
+
+module.exports = router;

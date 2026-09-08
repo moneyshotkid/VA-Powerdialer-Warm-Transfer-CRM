@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dialer — Admin</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div class="topbar">
+    <h1>Admin Dashboard</h1>
+    <div class="user-info">
+      <span id="me-label"></span>
+      <a href="/agent.html">Open Dialer</a>
+      <button id="logout-btn">Log out</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <button data-tab="leads" class="active">Leads</button>
+      <button data-tab="calllogs">Call Logs</button>
+      <button data-tab="users">Users</button>
+      <button data-tab="settings">Settings</button>
+    </div>
+
+    <!-- Leads tab -->
+    <section id="tab-leads">
+      <div class="card">
+        <h2>Import Leads (CSV)</h2>
+        <p class="hint">Columns: number, phone_number, contact_person, contact_title, email, company, address, category, city, website, notes, name, callback_appt</p>
+        <input type="file" id="csv-file" accept=".csv" />
+        <div class="controls-row">
+          <button id="upload-btn" class="primary">Upload</button>
+        </div>
+        <div id="upload-result" class="status-line"></div>
+      </div>
+
+      <div class="card">
+        <h2>Leads</h2>
+        <div class="controls-row">
+          <select id="lead-status-filter">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="called">Called</option>
+            <option value="transferred">Transferred</option>
+            <option value="do_not_call">Do Not Call</option>
+          </select>
+          <input id="lead-search" placeholder="Search name/company/phone…" />
+          <button id="lead-refresh-btn">Refresh</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table id="leads-table">
+            <thead>
+              <tr><th>Name</th><th>Company</th><th>Phone</th><th>Status</th><th>Callback</th><th>Notes</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Call logs tab -->
+    <section id="tab-calllogs" hidden>
+      <div class="card">
+        <h2>Call Logs &amp; Analytics</h2>
+        <div class="controls-row">
+          <button id="calllog-refresh-btn">Refresh</button>
+          <a href="/api/leads/call-logs/export"><button type="button">Export CSV</button></a>
+        </div>
+        <div style="overflow-x:auto">
+          <table id="calllogs-table">
+            <thead>
+              <tr><th>When</th><th>Lead</th><th>Agent</th><th>Channel</th><th>Outcome</th><th>Notes</th><th>Duration</th><th>Transferred To</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Users tab -->
+    <section id="tab-users" hidden>
+      <div class="grid-2">
+        <div class="card">
+          <h2>Agents</h2>
+          <table id="users-table">
+            <thead><tr><th>Username</th><th>Role</th><th>Call My Phone #</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h2>Add / Edit Agent</h2>
+          <form id="user-form">
+            <input type="hidden" id="user-id" />
+            <label>Username</label>
+            <input id="user-username" required />
+            <label>Display Name</label>
+            <input id="user-display-name" />
+            <label>Password (leave blank to keep existing when editing)</label>
+            <input id="user-password" type="password" />
+            <label>Role</label>
+            <select id="user-role">
+              <option value="agent">Agent</option>
+              <option value="admin">Admin</option>
+            </select>
+            <label>"Call My Phone" number (E.164, e.g. +15551234567) — admin only</label>
+            <input id="user-phone" placeholder="+15551234567" />
+            <div class="controls-row">
+              <button type="submit" class="primary">Save</button>
+              <button type="button" id="user-form-reset">Clear</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Settings tab -->
+    <section id="tab-settings" hidden>
+      <div class="grid-2">
+        <div class="card">
+          <h2>Warm Transfer Target</h2>
+          <form id="transfer-settings-form">
+            <label>Transfer Target Name</label>
+            <input id="transfer-name" placeholder="e.g. Sales Manager" />
+            <label>Transfer Target Phone (E.164)</label>
+            <input id="transfer-phone" placeholder="+15551234567" />
+            <div class="controls-row">
+              <button type="submit" class="primary">Save</button>
+            </div>
+          </form>
+        </div>
+        <div class="card">
+          <h2>AI Assistant (Vapi) — optional</h2>
+          <p class="hint">Leave unset to hide the "AI Assistant" dialer channel.</p>
+          <form id="vapi-settings-form">
+            <label>Assistant</label>
+            <select id="vapi-assistant"><option value="">— none —</option></select>
+            <label>Phone Number ID</label>
+            <input id="vapi-phone-number-id" placeholder="Vapi phone number id" />
+            <div class="controls-row">
+              <button type="submit" class="primary">Save</button>
+              <button type="button" id="vapi-load-assistants">Load assistants from Vapi</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>

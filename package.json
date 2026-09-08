@@ -1,0 +1,23 @@
+{
+  "name": "dialer",
+  "version": "1.0.0",
+  "description": "Outbound power dialer + CRM with Twilio warm transfer and optional Vapi AI assistant calling",
+  "type": "commonjs",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "@twilio/voice-sdk": "^2.12.3",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.3.0",
+    "csv-parse": "^5.5.6",
+    "csv-stringify": "^6.5.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-session": "^1.18.0",
+    "multer": "^2.3.0",
+    "twilio": "^5.3.0"
+  }
+}

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dialer — Agent</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div class="topbar">
+    <h1>VA Power Dialer</h1>
+    <div class="user-info">
+      <span id="me-label"></span>
+      <a id="admin-link" href="/admin.html" hidden>Admin Dashboard</a>
+      <button id="logout-btn">Log out</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <div class="controls-row">
+        <label style="margin:0">Channel:</label>
+        <select id="channel-select">
+          <option value="browser">Browser (WebRTC)</option>
+          <option value="phone" id="channel-phone-option" hidden>Call My Phone</option>
+          <option value="vapi" id="channel-vapi-option" hidden>AI Assistant</option>
+        </select>
+        <span id="device-status" class="status-line"></span>
+      </div>
+      <div class="controls-row">
+        <button id="start-autodial-btn" class="primary">Start Auto-Dial</button>
+        <button id="pause-queue-btn" disabled>Pause Queue</button>
+        <button id="next-lead-btn">Next Lead</button>
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div class="card lead-panel">
+        <h2>Current Lead</h2>
+        <div id="lead-empty" class="hint">No lead loaded. Click "Next Lead" or "Start Auto-Dial".</div>
+        <div id="lead-details" hidden>
+          <div class="field"><div class="k">Name</div><div class="v" id="lead-name"></div></div>
+          <div class="field"><div class="k">Company</div><div class="v" id="lead-company"></div></div>
+          <div class="field"><div class="k">Phone</div><div class="v" id="lead-phone"></div></div>
+          <div class="field"><div class="k">Notes</div><div class="v" id="lead-notes"></div></div>
+        </div>
+
+        <div class="controls-row">
+          <button id="call-btn" class="primary">Call</button>
+          <button id="mute-btn" disabled>Mute</button>
+          <button id="hangup-btn" class="danger" disabled>Hangup</button>
+        </div>
+        <div class="controls-row">
+          <button id="transfer-btn" class="warn" disabled>Warm Transfer</button>
+          <button id="hold-btn" disabled>Hold Lead</button>
+          <button id="complete-transfer-btn" class="success" disabled>Complete Transfer</button>
+        </div>
+        <div id="call-status" class="status-line"></div>
+
+        <h2>Outcome</h2>
+        <form id="outcome-form">
+          <input type="hidden" id="outcome-call-log-id" />
+          <label>Contact Person</label>
+          <input id="outcome-contact-person" />
+          <label>Contact Title</label>
+          <input id="outcome-contact-title" />
+          <label>Email</label>
+          <input id="outcome-email" type="email" />
+          <label>Callback Appointment</label>
+          <input id="outcome-callback-appt" type="datetime-local" />
+          <label>Call Outcome</label>
+          <select id="outcome-value" required>
+            <option value="">Select…</option>
+            <option>Answered</option>
+            <option>No Answer</option>
+            <option>Left Voicemail</option>
+            <option>Interested/Transferred</option>
+            <option>Do Not Call</option>
+          </select>
+          <label>Notes</label>
+          <textarea id="outcome-notes" rows="4"></textarea>
+          <div class="controls-row">
+            <button type="submit" class="primary">Save &amp; Next</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Queue</h2>
+        <div id="queue-list" class="queue-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/vendor/twilio.js"></script>
+  <script type="module" src="/js/agent.js"></script>
+</body>
+</html>
