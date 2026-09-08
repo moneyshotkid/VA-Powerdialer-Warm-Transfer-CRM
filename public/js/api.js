@@ -12,7 +12,14 @@ export async function api(path, options = {}) {
   }
 
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // Not JSON — e.g. a 404/500 HTML error page from a route path mismatch, or a proxy/
+    // gateway error page. Surface something readable instead of a raw JSON syntax error.
+    throw new Error(`Unexpected non-JSON response from ${path} (HTTP ${res.status})`);
+  }
   if (!res.ok) {
     throw new Error((data && data.error) || res.statusText);
   }

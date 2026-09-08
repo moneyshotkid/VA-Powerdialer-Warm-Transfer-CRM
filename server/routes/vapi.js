@@ -6,7 +6,7 @@ const vapiClient = require('../services/vapiClient');
 
 const router = express.Router();
 
-router.get('/assistants', requireAdmin, async (req, res) => {
+router.get('/vapi/assistants', requireAdmin, async (req, res) => {
   try {
     const assistants = await vapiClient.listAssistants();
     res.json(assistants);
