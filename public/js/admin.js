@@ -76,6 +76,7 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
   }
   const formData = new FormData();
   formData.append('file', fileInput.files[0]);
+  formData.append('headerless', document.getElementById('csv-headerless').checked ? 'true' : 'false');
   resultEl.textContent = 'Uploading…';
   try {
     const res = await fetch('/api/leads/upload', { method: 'POST', body: formData, credentials: 'same-origin' });

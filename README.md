@@ -94,11 +94,22 @@ APIs evolve.
 
 ## Lead CSV columns
 
+**With a header row (default)** — columns matched by name, any order:
 ```
 number, phone_number, contact_person, contact_title, email, company, address, category,
 city, website, notes, name, callback_appt, assistant, rating, review_count, review_bucket,
 latest_review_age_days, is_unclaimed, maps_url, facebook, instagram, linkedin
 ```
+
+**Without a header row** — check "This file has no header row" on the upload form; every row
+is treated as data and columns are matched strictly by position, in this exact order:
+```
+company, category, address, city, phone, website, email, facebook, instagram, linkedin,
+rating, review_count, review_bucket, latest_review_age_days, is_unclaimed, maps_url
+```
+Fields outside this list (`contact_person`, `notes`, `name`, `callback_appt`, `assistant`,
+the CSV's own `number`/external id) are simply left blank for a positional import — use the
+header-row mode instead if a file needs to set those too.
 
 Only `phone_number` is required — rows missing it are rejected and reported in the upload
 summary. `rating`/`review_count`/`latest_review_age_days` are parsed as numbers;

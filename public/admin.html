@@ -28,8 +28,13 @@
     <section id="tab-leads">
       <div class="card">
         <h2>Import Leads (CSV)</h2>
-        <p class="hint">Columns: number, phone_number, contact_person, contact_title, email, company, address, category, city, website, notes, name, callback_appt, assistant, rating, review_count, review_bucket, latest_review_age_days, is_unclaimed, maps_url, facebook, instagram, linkedin</p>
+        <p class="hint">With a header row (default): columns can be in any order, matched by name — number, phone_number, contact_person, contact_title, email, company, address, category, city, website, notes, name, callback_appt, assistant, rating, review_count, review_bucket, latest_review_age_days, is_unclaimed, maps_url, facebook, instagram, linkedin</p>
+        <p class="hint">Without a header row: every row is data, columns matched strictly by position in this order — company, category, address, city, phone, website, email, facebook, instagram, linkedin, rating, review_count, review_bucket, latest_review_age_days, is_unclaimed, maps_url</p>
         <input type="file" id="csv-file" accept=".csv" />
+        <label style="display:flex;align-items:center;gap:6px;margin-top:8px">
+          <input type="checkbox" id="csv-headerless" style="width:auto" />
+          This file has no header row (match columns by position)
+        </label>
         <div class="controls-row">
           <button id="upload-btn" class="primary">Upload</button>
         </div>

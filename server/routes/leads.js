@@ -12,8 +12,11 @@ router.use(requireAuth);
 
 router.post('/upload', requireAdmin, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'CSV file is required (field name "file")' });
+  // "headerless" (multipart text field, e.g. "true"/"1" from a checkbox) selects positional
+  // column matching for a file with no header row — see services/csv.js parsePositionalCsv.
+  const headerless = ['true', '1', 'on'].includes(String(req.body.headerless).toLowerCase());
   try {
-    const summary = parseLeadsCsv(req.file.buffer);
+    const summary = parseLeadsCsv(req.file.buffer, { headerless });
     res.json(summary);
   } catch (err) {
     res.status(400).json({ error: `Failed to parse CSV: ${err.message}` });
