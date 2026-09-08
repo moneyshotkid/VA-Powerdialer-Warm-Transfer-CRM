@@ -15,6 +15,10 @@ const els = {
   leadName: document.getElementById('lead-name'),
   leadCompany: document.getElementById('lead-company'),
   leadPhone: document.getElementById('lead-phone'),
+  leadRating: document.getElementById('lead-rating'),
+  leadUnclaimed: document.getElementById('lead-unclaimed'),
+  leadAssistant: document.getElementById('lead-assistant'),
+  leadLinks: document.getElementById('lead-links'),
   leadNotes: document.getElementById('lead-notes'),
   callBtn: document.getElementById('call-btn'),
   muteBtn: document.getElementById('mute-btn'),
@@ -50,6 +54,16 @@ function escapeHtml(str) {
 
 function setStatus(text) {
   els.callStatus.textContent = text || '';
+}
+
+function socialLink(url, label) {
+  if (!url) return '';
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.textContent = label;
+  return a;
 }
 
 function resetCallControls() {
@@ -137,6 +151,20 @@ function renderLead(lead) {
   els.leadCompany.textContent = lead.company || '';
   els.leadPhone.textContent = lead.phone_number || '';
   els.leadNotes.textContent = lead.notes || '';
+
+  els.leadRating.textContent = lead.rating != null
+    ? `${lead.rating}★ (${lead.review_count ?? '?'} reviews${lead.review_bucket ? `, ${lead.review_bucket}` : ''})`
+    : '—';
+  els.leadUnclaimed.textContent = lead.is_unclaimed == null ? '—' : lead.is_unclaimed ? 'Yes' : 'No';
+  els.leadAssistant.textContent = lead.assistant || '—';
+  els.leadLinks.innerHTML = '';
+  [socialLink(lead.maps_url, 'Maps'), socialLink(lead.facebook, 'Facebook'), socialLink(lead.instagram, 'Instagram'), socialLink(lead.linkedin, 'LinkedIn')]
+    .filter(Boolean)
+    .forEach((a, i, arr) => {
+      els.leadLinks.appendChild(a);
+      if (i < arr.length - 1) els.leadLinks.appendChild(document.createTextNode(' · '));
+    });
+  if (!els.leadLinks.childNodes.length) els.leadLinks.textContent = '—';
 
   els.outcomeForm.reset();
   document.getElementById('outcome-contact-person').value = lead.contact_person || '';

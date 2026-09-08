@@ -37,6 +37,16 @@ CREATE TABLE IF NOT EXISTS leads (
   notes TEXT,
   name TEXT,
   callback_appt TEXT,
+  assistant TEXT,
+  rating REAL,
+  review_count INTEGER,
+  review_bucket TEXT,
+  latest_review_age_days INTEGER,
+  is_unclaimed INTEGER,
+  maps_url TEXT,
+  facebook TEXT,
+  instagram TEXT,
+  linkedin TEXT,
   status TEXT NOT NULL CHECK (status IN ('pending','called','transferred','do_not_call')) DEFAULT 'pending',
   last_outcome TEXT,
   assigned_agent_id INTEGER REFERENCES users(id),
@@ -82,6 +92,29 @@ CREATE INDEX IF NOT EXISTS idx_call_logs_lead_id ON call_logs(lead_id);
 CREATE INDEX IF NOT EXISTS idx_call_logs_conference_name ON call_logs(conference_name);
 CREATE INDEX IF NOT EXISTS idx_call_logs_vapi_call_id ON call_logs(vapi_call_id);
 `);
+
+// Lightweight migration for a `leads` table created before these columns existed — CREATE
+// TABLE IF NOT EXISTS above is a no-op on an existing table, so a database file from an
+// earlier version of the app needs these added explicitly (SQLite has no
+// "ADD COLUMN IF NOT EXISTS", hence the manual existence check).
+const LEAD_COLUMNS_V2 = {
+  assistant: 'TEXT',
+  rating: 'REAL',
+  review_count: 'INTEGER',
+  review_bucket: 'TEXT',
+  latest_review_age_days: 'INTEGER',
+  is_unclaimed: 'INTEGER',
+  maps_url: 'TEXT',
+  facebook: 'TEXT',
+  instagram: 'TEXT',
+  linkedin: 'TEXT',
+};
+const existingLeadColumns = new Set(db.prepare('PRAGMA table_info(leads)').all().map((c) => c.name));
+for (const [column, definition] of Object.entries(LEAD_COLUMNS_V2)) {
+  if (!existingLeadColumns.has(column)) {
+    db.exec(`ALTER TABLE leads ADD COLUMN ${column} ${definition}`);
+  }
+}
 
 // Seed a default admin if no users exist yet.
 const userCount = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;

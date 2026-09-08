@@ -65,7 +65,13 @@ The "AI Assistant" dialer channel stays hidden until this is set up:
    `callback_appt`. Point its Server URL (or the assistant's Server URL, which the tool call
    also goes through) at `{PUBLIC_BASE_URL}/api/webhooks/vapi`, and set a shared secret there
    matching `VAPI_SERVER_SECRET` in `.env`.
-5. Optional: attach Vapi's built-in "transfer call" tool to the assistant, pointed at the
+5. Before dialing, we also hand the assistant the lead's business details — `company`,
+   `address`, `category`, `city`, `website`, `rating`, `review_count`, `review_bucket`,
+   `latest_review_age_days`, `is_unclaimed` — via Vapi's `assistantOverrides.variableValues`,
+   so the assistant's own system prompt can reference them with `{{company}}`, `{{rating}}`,
+   etc. (e.g. *"Hi, I'm calling about {{company}}'s listing on {{website}}…"*). Write the
+   assistant's prompt using those placeholders for whichever fields it should mention.
+6. Optional: attach Vapi's built-in "transfer call" tool to the assistant, pointed at the
    same number configured as the Warm Transfer Target in Admin → Settings, so the AI can hand
    an interested lead to a human the same way the human-agent channels do. This transfer
    happens entirely inside Vapi's own call — our app only observes and logs it via webhook
@@ -79,10 +85,25 @@ APIs evolve.
 
 - Sessions use an in-memory store — fine for a single-instance internal tool, but sessions
   are lost on restart and won't work across multiple server instances.
-- No database migration framework; schema changes require a manual `ALTER TABLE` or a fresh
-  SQLite file during development.
+- No real migration framework — `server/db.js` runs `CREATE TABLE IF NOT EXISTS` plus a
+  hand-written list of `ALTER TABLE ADD COLUMN` calls for columns added after the initial
+  release (see `LEAD_COLUMNS_V2`). A future column needs the same treatment; anything more
+  involved (renames, drops) still needs a manual migration.
 - CSV import does not de-duplicate by phone number — re-uploading the same file creates
   duplicate leads.
+
+## Lead CSV columns
+
+```
+number, phone_number, contact_person, contact_title, email, company, address, category,
+city, website, notes, name, callback_appt, assistant, rating, review_count, review_bucket,
+latest_review_age_days, is_unclaimed, maps_url, facebook, instagram, linkedin
+```
+
+Only `phone_number` is required — rows missing it are rejected and reported in the upload
+summary. `rating`/`review_count`/`latest_review_age_days` are parsed as numbers;
+`is_unclaimed` accepts `true`/`false`, `yes`/`no`, `1`/`0`, or `claimed`/`unclaimed`
+(case-insensitive) and is stored as a boolean. Everything else is stored as plain text.
 
 ## Project layout
 

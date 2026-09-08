@@ -28,7 +28,7 @@
     <section id="tab-leads">
       <div class="card">
         <h2>Import Leads (CSV)</h2>
-        <p class="hint">Columns: number, phone_number, contact_person, contact_title, email, company, address, category, city, website, notes, name, callback_appt</p>
+        <p class="hint">Columns: number, phone_number, contact_person, contact_title, email, company, address, category, city, website, notes, name, callback_appt, assistant, rating, review_count, review_bucket, latest_review_age_days, is_unclaimed, maps_url, facebook, instagram, linkedin</p>
         <input type="file" id="csv-file" accept=".csv" />
         <div class="controls-row">
           <button id="upload-btn" class="primary">Upload</button>
@@ -52,7 +52,11 @@
         <div style="overflow-x:auto">
           <table id="leads-table">
             <thead>
-              <tr><th>Name</th><th>Company</th><th>Phone</th><th>Status</th><th>Callback</th><th>Notes</th></tr>
+              <tr>
+                <th>Name</th><th>Company</th><th>Phone</th><th>Status</th>
+                <th>Rating</th><th>Reviews</th><th>Unclaimed</th><th>Assistant</th>
+                <th>Callback</th><th>Links</th><th>Notes</th>
+              </tr>
             </thead>
             <tbody></tbody>
           </table>

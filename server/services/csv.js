@@ -17,10 +17,34 @@ const COLUMN_MAP = {
   notes: 'notes',
   name: 'name',
   callback_appt: 'callback_appt',
+  assistant: 'assistant',
+  rating: 'rating',
+  review_count: 'review_count',
+  review_bucket: 'review_bucket',
+  latest_review_age_days: 'latest_review_age_days',
+  is_unclaimed: 'is_unclaimed',
+  maps_url: 'maps_url',
+  facebook: 'facebook',
+  instagram: 'instagram',
+  linkedin: 'linkedin',
 };
+
+// Columns that need type coercion rather than a plain trimmed string.
+const NUMERIC_COLUMNS = new Set(['rating', 'review_count', 'latest_review_age_days']);
+const BOOLEAN_COLUMNS = new Set(['is_unclaimed']);
+
+const TRUE_VALUES = new Set(['true', 'yes', 'y', '1', 'unclaimed']);
+const FALSE_VALUES = new Set(['false', 'no', 'n', '0', 'claimed']);
 
 function normalizeHeader(header) {
   return header.trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+function parseBoolean(value) {
+  const v = value.toLowerCase();
+  if (TRUE_VALUES.has(v)) return 1;
+  if (FALSE_VALUES.has(v)) return 0;
+  return null;
 }
 
 function parseLeadsCsv(buffer) {
@@ -30,11 +54,10 @@ function parseLeadsCsv(buffer) {
     trim: true,
   });
 
+  const columns = Object.values(COLUMN_MAP);
   const insert = db.prepare(`
-    INSERT INTO leads (external_id, phone_number, contact_person, contact_title, email,
-      company, address, category, city, website, notes, name, callback_appt)
-    VALUES (@external_id, @phone_number, @contact_person, @contact_title, @email,
-      @company, @address, @category, @city, @website, @notes, @name, @callback_appt)
+    INSERT INTO leads (${columns.join(', ')})
+    VALUES (${columns.map((c) => `@${c}`).join(', ')})
   `);
 
   let inserted = 0;
@@ -46,7 +69,17 @@ function parseLeadsCsv(buffer) {
       const rowNum = index + 2; // account for header row, 1-indexed
       const mapped = {};
       for (const [csvKey, column] of Object.entries(COLUMN_MAP)) {
-        mapped[column] = row[csvKey] ? String(row[csvKey]).trim() : null;
+        const raw = row[csvKey] ? String(row[csvKey]).trim() : '';
+        if (!raw) {
+          mapped[column] = null;
+        } else if (NUMERIC_COLUMNS.has(column)) {
+          const n = Number(raw);
+          mapped[column] = Number.isFinite(n) ? n : null;
+        } else if (BOOLEAN_COLUMNS.has(column)) {
+          mapped[column] = parseBoolean(raw);
+        } else {
+          mapped[column] = raw;
+        }
       }
 
       if (!mapped.phone_number) {

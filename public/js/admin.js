@@ -6,6 +6,18 @@ function escapeHtml(str) {
   }[c]));
 }
 
+function socialLink(url, label) {
+  if (!url) return '';
+  const href = escapeHtml(url);
+  return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+}
+
+function leadLinksHtml(l) {
+  return [socialLink(l.maps_url, 'Maps'), socialLink(l.facebook, 'FB'), socialLink(l.instagram, 'IG'), socialLink(l.linkedin, 'LI')]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 // --- Tabs ---------------------------------------------------------------
 document.querySelectorAll('.tabs button').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -41,7 +53,12 @@ async function loadLeads() {
         <td>${escapeHtml(l.company)}</td>
         <td>${escapeHtml(l.phone_number)}</td>
         <td><span class="badge ${l.status}">${l.status}</span></td>
+        <td>${l.rating != null ? escapeHtml(l.rating) : ''}</td>
+        <td>${l.review_count != null ? escapeHtml(l.review_count) : ''}${l.review_bucket ? ` (${escapeHtml(l.review_bucket)})` : ''}</td>
+        <td>${l.is_unclaimed == null ? '' : l.is_unclaimed ? 'Yes' : 'No'}</td>
+        <td>${escapeHtml(l.assistant)}</td>
         <td>${escapeHtml(l.callback_appt)}</td>
+        <td>${leadLinksHtml(l)}</td>
         <td>${escapeHtml(l.notes)}</td>
       </tr>`
     )

@@ -35,9 +35,29 @@ function listAssistants() {
   return vapiFetch('/assistant', { method: 'GET' });
 }
 
+// Business-context fields handed to the assistant itself (via assistantOverrides.variableValues,
+// referenced in its prompt as {{company}}, {{rating}}, etc. — see README) so it has the lead's
+// business details before it starts talking, not just afterward via the outcome webhook.
+function leadVariableValues(lead) {
+  return {
+    company: lead.company || '',
+    address: lead.address || '',
+    category: lead.category || '',
+    city: lead.city || '',
+    website: lead.website || '',
+    rating: lead.rating ?? '',
+    review_count: lead.review_count ?? '',
+    review_bucket: lead.review_bucket || '',
+    latest_review_age_days: lead.latest_review_age_days ?? '',
+    is_unclaimed: lead.is_unclaimed ? 'true' : 'false',
+  };
+}
+
 /**
  * Originate an outbound call handled entirely by Vapi's own telephony. leadId/callLogId are
- * threaded through as call metadata so the webhook can correlate events back to our rows.
+ * threaded through as call metadata so the webhook can correlate events back to our rows;
+ * the lead's business details go in assistantOverrides.variableValues so the assistant has
+ * them available for the conversation itself, before the call even connects.
  */
 function createCall({ assistantId, phoneNumberId, lead, callLogId }) {
   return vapiFetch('/call', {
@@ -48,6 +68,9 @@ function createCall({ assistantId, phoneNumberId, lead, callLogId }) {
       customer: {
         number: lead.phone_number,
         name: lead.name || lead.contact_person || undefined,
+      },
+      assistantOverrides: {
+        variableValues: leadVariableValues(lead),
       },
       metadata: {
         leadId: String(lead.id),
