@@ -14,8 +14,13 @@ const els = {
   leadDetails: document.getElementById('lead-details'),
   leadName: document.getElementById('lead-name'),
   leadCompany: document.getElementById('lead-company'),
+  leadCategory: document.getElementById('lead-category'),
+  leadAddress: document.getElementById('lead-address'),
   leadPhone: document.getElementById('lead-phone'),
+  leadWebsite: document.getElementById('lead-website'),
+  leadEmail: document.getElementById('lead-email'),
   leadRating: document.getElementById('lead-rating'),
+  leadLatestReview: document.getElementById('lead-latest-review'),
   leadUnclaimed: document.getElementById('lead-unclaimed'),
   leadAssistant: document.getElementById('lead-assistant'),
   leadLinks: document.getElementById('lead-links'),
@@ -149,11 +154,21 @@ function renderLead(lead) {
   els.leadDetails.hidden = false;
   els.leadName.textContent = lead.name || lead.contact_person || '(no name)';
   els.leadCompany.textContent = lead.company || '';
+  els.leadCategory.textContent = lead.category || '—';
+  els.leadAddress.textContent = [lead.address, lead.city].filter(Boolean).join(', ') || '—';
   els.leadPhone.textContent = lead.phone_number || '';
+  els.leadWebsite.innerHTML = '';
+  const websiteLink = lead.website ? socialLink(/^https?:\/\//i.test(lead.website) ? lead.website : `https://${lead.website}`, lead.website) : null;
+  if (websiteLink) els.leadWebsite.appendChild(websiteLink);
+  else els.leadWebsite.textContent = '—';
+  els.leadEmail.textContent = lead.email || '—';
   els.leadNotes.textContent = lead.notes || '';
 
   els.leadRating.textContent = lead.rating != null
     ? `${lead.rating}★ (${lead.review_count ?? '?'} reviews${lead.review_bucket ? `, ${lead.review_bucket}` : ''})`
+    : '—';
+  els.leadLatestReview.textContent = lead.latest_review_age_days != null
+    ? `${lead.latest_review_age_days} day${lead.latest_review_age_days === 1 ? '' : 's'} ago`
     : '—';
   els.leadUnclaimed.textContent = lead.is_unclaimed == null ? '—' : lead.is_unclaimed ? 'Yes' : 'No';
   els.leadAssistant.textContent = lead.assistant || '—';
