@@ -4,6 +4,7 @@ const { db } = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { parseLeadsCsv, exportCallLogsCsv, exportLeadsCsv } = require('../services/csv');
 const { applyOutcome, claimNextLead } = require('../services/leads');
+const { toE164 } = require('../services/phone');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -164,8 +165,14 @@ router.put('/:id', requireAdmin, (req, res) => {
     values[field] = coerceLeadField(field, body[field]);
   }
 
+  const rawPhone = values.phone_number;
+  values.phone_number = toE164(rawPhone);
   if (!values.phone_number) {
-    return res.status(400).json({ error: 'phone_number is required' });
+    return res.status(400).json({
+      error: rawPhone
+        ? `"${rawPhone}" is not a valid phone number (need something parseable as E.164, e.g. +15551234567)`
+        : 'phone_number is required',
+    });
   }
   if (values.status && !VALID_STATUSES.has(values.status)) {
     return res.status(400).json({ error: `status must be one of: ${[...VALID_STATUSES].join(', ')}` });

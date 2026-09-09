@@ -35,6 +35,10 @@ function listAssistants() {
   return vapiFetch('/assistant', { method: 'GET' });
 }
 
+function listPhoneNumbers() {
+  return vapiFetch('/phone-number', { method: 'GET' });
+}
+
 // Business-context fields handed to the assistant itself (via assistantOverrides.variableValues,
 // referenced in its prompt as {{company}}, {{rating}}, etc. — see README) so it has the lead's
 // business details before it starts talking, not just afterward via the outcome webhook.
@@ -88,4 +92,4 @@ function verifyWebhookSecret(req) {
   return Boolean(provided) && provided === expected;
 }
 
-module.exports = { listAssistants, createCall, verifyWebhookSecret };
+module.exports = { listAssistants, listPhoneNumbers, createCall, verifyWebhookSecret };

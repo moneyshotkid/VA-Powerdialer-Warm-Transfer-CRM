@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db, getSetting, setSetting } = require('../db');
 const { requireAdmin } = require('../middleware/auth');
+const { toE164 } = require('../services/phone');
 
 const router = express.Router();
 
@@ -24,6 +25,13 @@ router.post('/', (req, res) => {
   if (role && !['admin', 'agent'].includes(role)) {
     return res.status(400).json({ error: 'role must be "admin" or "agent"' });
   }
+  let normalizedPhone = null;
+  if (phone_number) {
+    normalizedPhone = toE164(phone_number);
+    if (!normalizedPhone) {
+      return res.status(400).json({ error: `"${phone_number}" is not a valid phone number (need E.164, e.g. +15551234567)` });
+    }
+  }
 
   const hash = bcrypt.hashSync(password, 10);
   const twilioIdentity = `agent-${username}`;
@@ -33,7 +41,7 @@ router.post('/', (req, res) => {
         `INSERT INTO users (username, password_hash, role, display_name, twilio_identity, phone_number)
          VALUES (?, ?, ?, ?, ?, ?)`
       )
-      .run(username, hash, role || 'agent', display_name || username, twilioIdentity, phone_number || null);
+      .run(username, hash, role || 'agent', display_name || username, twilioIdentity, normalizedPhone);
     res.status(201).json(db.prepare(`SELECT ${USER_FIELDS} FROM users WHERE id = ?`).get(info.lastInsertRowid));
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) {
@@ -53,6 +61,7 @@ router.get('/settings', (req, res) => {
     vapi_assistant_id: getSetting('vapi_assistant_id', ''),
     vapi_assistant_name: getSetting('vapi_assistant_name', ''),
     vapi_phone_number_id: getSetting('vapi_phone_number_id', ''),
+    vapi_phone_number_label: getSetting('vapi_phone_number_label', ''),
   });
 });
 
@@ -63,13 +72,21 @@ router.put('/settings', (req, res) => {
     vapi_assistant_id,
     vapi_assistant_name,
     vapi_phone_number_id,
+    vapi_phone_number_label,
   } = req.body || {};
 
   if (transfer_target_name !== undefined) setSetting('transfer_target_name', transfer_target_name);
-  if (transfer_target_phone !== undefined) setSetting('transfer_target_phone', transfer_target_phone);
+  if (transfer_target_phone !== undefined) {
+    const normalized = transfer_target_phone ? toE164(transfer_target_phone) : '';
+    if (transfer_target_phone && !normalized) {
+      return res.status(400).json({ error: `"${transfer_target_phone}" is not a valid phone number (need E.164, e.g. +15551234567)` });
+    }
+    setSetting('transfer_target_phone', normalized);
+  }
   if (vapi_assistant_id !== undefined) setSetting('vapi_assistant_id', vapi_assistant_id);
   if (vapi_assistant_name !== undefined) setSetting('vapi_assistant_name', vapi_assistant_name);
   if (vapi_phone_number_id !== undefined) setSetting('vapi_phone_number_id', vapi_phone_number_id);
+  if (vapi_phone_number_label !== undefined) setSetting('vapi_phone_number_label', vapi_phone_number_label);
 
   res.json({ ok: true });
 });
@@ -84,6 +101,13 @@ router.put('/:id', (req, res) => {
   if (role && !['admin', 'agent'].includes(role)) {
     return res.status(400).json({ error: 'role must be "admin" or "agent"' });
   }
+  let normalizedPhone = phone_number; // undefined -> COALESCE keeps existing; falsy -> also fine
+  if (phone_number) {
+    normalizedPhone = toE164(phone_number);
+    if (!normalizedPhone) {
+      return res.status(400).json({ error: `"${phone_number}" is not a valid phone number (need E.164, e.g. +15551234567)` });
+    }
+  }
 
   db.prepare(
     `UPDATE users SET
@@ -91,7 +115,7 @@ router.put('/:id', (req, res) => {
        phone_number = COALESCE(?, phone_number),
        role = COALESCE(?, role)
      WHERE id = ?`
-  ).run(display_name, phone_number, role, user.id);
+  ).run(display_name, normalizedPhone, role, user.id);
 
   if (password) {
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), user.id);

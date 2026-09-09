@@ -14,6 +14,7 @@ const tokenRoutes = require('./routes/token');
 const voiceRoutes = require('./routes/voice');
 const vapiRoutes = require('./routes/vapi');
 const capabilitiesRoutes = require('./routes/capabilities');
+const logsRoutes = require('./routes/logs');
 const { requireAuth } = require('./middleware/auth');
 
 const app = express();
@@ -39,6 +40,7 @@ app.use('/api/token', tokenRoutes);
 app.use('/api/voice', voiceRoutes);
 app.use('/api', vapiRoutes); // exposes /api/vapi/assistants, /api/voice/start-vapi-call, /api/webhooks/vapi
 app.use('/api/capabilities', capabilitiesRoutes);
+app.use('/api/logs', logsRoutes);
 
 // Serve the Twilio Voice JS SDK's browser bundle without a CDN dependency. The package's
 // "exports" map only exposes the ESM/CJS module entry points (for bundlers) and blocks

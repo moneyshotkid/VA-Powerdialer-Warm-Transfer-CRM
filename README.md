@@ -22,6 +22,14 @@ assistant (Vapi) dialer channel.
      Users), never by the agent.
   3. **AI Assistant (Vapi)** — a configured Vapi AI voice assistant places and conducts the
      call itself; the human operator reviews/finalizes the logged outcome.
+- **Phone number normalization**: every phone number entering the app — CSV import, the
+  admin lead-edit form, an agent's "Call My Phone" number, the warm-transfer target — is
+  parsed and normalized to E.164 (`+15551234567`) via `libphonenumber-js`, since that's the
+  format Twilio and Vapi both require; anything unparseable is rejected with a clear error
+  instead of failing later at call time with Twilio/Vapi's own opaque message.
+- **Admin troubleshooting Logs tab**: call setup attempts, Twilio/Vapi API failures, and
+  Vapi webhook activity are written to a persistent, filterable log (Admin → Logs) — useful
+  since the admin here is also the one debugging the integration.
 
 ## Setup
 
@@ -61,8 +69,9 @@ The "AI Assistant" dialer channel stays hidden until this is set up:
 
 1. Create a Vapi account, an assistant, and provision/import a phone number for it.
 2. Set `VAPI_API_KEY` in `.env`.
-3. In Admin → Settings → "AI Assistant (Vapi)", click **Load assistants from Vapi**, pick the
-   assistant, and enter its phone number's id.
+3. In Admin → Settings → "AI Assistant (Vapi)", click **Load assistants from Vapi** and
+   **Load phone numbers from Vapi**, then pick both from the dropdowns — Vapi requires the
+   phone number's exact UUID, which is easy to get wrong typing it in by hand.
 4. On the assistant, add a custom **function tool** named `log_lead_outcome` with parameters
    matching the outcome form: `outcome` (enum: Answered, No Answer, Left Voicemail,
    Interested/Transferred, Do Not Call), `notes`, `contact_person`, `contact_title`, `email`,

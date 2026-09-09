@@ -267,28 +267,35 @@ document.getElementById('user-form').addEventListener('submit', async (e) => {
 });
 
 // --- Settings -------------------------------------------------------------
+function ensureOptionAndSelect(select, value, label) {
+  if (value && ![...select.options].some((o) => o.value === value)) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label || value;
+    select.appendChild(opt);
+  }
+  select.value = value || '';
+}
+
 async function loadSettings() {
   const s = await get('/api/users/settings');
   document.getElementById('transfer-name').value = s.transfer_target_name || '';
   document.getElementById('transfer-phone').value = s.transfer_target_phone || '';
-  document.getElementById('vapi-phone-number-id').value = s.vapi_phone_number_id || '';
-  const select = document.getElementById('vapi-assistant');
-  if (s.vapi_assistant_id && ![...select.options].some((o) => o.value === s.vapi_assistant_id)) {
-    const opt = document.createElement('option');
-    opt.value = s.vapi_assistant_id;
-    opt.textContent = s.vapi_assistant_name || s.vapi_assistant_id;
-    select.appendChild(opt);
-  }
-  select.value = s.vapi_assistant_id || '';
+  ensureOptionAndSelect(document.getElementById('vapi-assistant'), s.vapi_assistant_id, s.vapi_assistant_name);
+  ensureOptionAndSelect(document.getElementById('vapi-phone-number'), s.vapi_phone_number_id, s.vapi_phone_number_label);
 }
 
 document.getElementById('transfer-settings-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  await put('/api/users/settings', {
-    transfer_target_name: document.getElementById('transfer-name').value.trim(),
-    transfer_target_phone: document.getElementById('transfer-phone').value.trim(),
-  });
-  alert('Saved.');
+  try {
+    await put('/api/users/settings', {
+      transfer_target_name: document.getElementById('transfer-name').value.trim(),
+      transfer_target_phone: document.getElementById('transfer-phone').value.trim(),
+    });
+    alert('Saved.');
+  } catch (err) {
+    alert(err.message);
+  }
 });
 
 document.getElementById('vapi-load-assistants').addEventListener('click', async () => {
@@ -309,18 +316,73 @@ document.getElementById('vapi-load-assistants').addEventListener('click', async 
   }
 });
 
+document.getElementById('vapi-load-phone-numbers').addEventListener('click', async () => {
+  try {
+    const numbers = await get('/api/vapi/phone-numbers');
+    const select = document.getElementById('vapi-phone-number');
+    const current = select.value;
+    select.innerHTML = '<option value="">— none —</option>';
+    (numbers || []).forEach((n) => {
+      const opt = document.createElement('option');
+      opt.value = n.id;
+      opt.textContent = n.number || n.name || n.id;
+      select.appendChild(opt);
+    });
+    select.value = current;
+  } catch (err) {
+    alert(`Could not load phone numbers from Vapi: ${err.message}`);
+  }
+});
+
 document.getElementById('vapi-settings-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const select = document.getElementById('vapi-assistant');
+  const assistantSelect = document.getElementById('vapi-assistant');
+  const phoneSelect = document.getElementById('vapi-phone-number');
   await put('/api/users/settings', {
-    vapi_assistant_id: select.value,
-    vapi_assistant_name: select.selectedOptions[0]?.textContent || '',
-    vapi_phone_number_id: document.getElementById('vapi-phone-number-id').value.trim(),
+    vapi_assistant_id: assistantSelect.value,
+    vapi_assistant_name: assistantSelect.selectedOptions[0]?.textContent || '',
+    vapi_phone_number_id: phoneSelect.value,
+    vapi_phone_number_label: phoneSelect.selectedOptions[0]?.textContent || '',
   });
   alert('Saved.');
 });
+
+// --- Logs -----------------------------------------------------------------
+async function loadLogs() {
+  const level = document.getElementById('logs-level-filter').value;
+  const source = document.getElementById('logs-source-filter').value;
+  const params = new URLSearchParams();
+  if (level) params.set('level', level);
+  if (source) params.set('source', source);
+  const rows = await get(`/api/logs?${params}`);
+  const tbody = document.querySelector('#logs-table tbody');
+  tbody.innerHTML = rows
+    .map((r) => {
+      let detail = '';
+      if (r.detail) {
+        try {
+          detail = JSON.stringify(JSON.parse(r.detail));
+        } catch {
+          detail = r.detail;
+        }
+      }
+      return `<tr>
+        <td>${escapeHtml(r.created_at)}</td>
+        <td><span class="badge ${r.level === 'error' ? 'do_not_call' : r.level === 'warn' ? 'called' : ''}">${escapeHtml(r.level)}</span></td>
+        <td>${escapeHtml(r.source)}</td>
+        <td>${r.call_log_id != null ? escapeHtml(r.call_log_id) : ''}</td>
+        <td>${escapeHtml(r.message)}</td>
+        <td style="max-width:320px;overflow-wrap:break-word" title="${escapeHtml(detail)}">${escapeHtml(detail.slice(0, 200))}</td>
+      </tr>`;
+    })
+    .join('') || '<tr><td colspan="6" class="hint">No logs yet.</td></tr>';
+}
+document.getElementById('logs-refresh-btn').addEventListener('click', loadLogs);
+document.getElementById('logs-level-filter').addEventListener('change', loadLogs);
+document.getElementById('logs-source-filter').addEventListener('change', loadLogs);
 
 loadLeads();
 loadCallLogs();
 loadUsers();
 loadSettings();
+loadLogs();

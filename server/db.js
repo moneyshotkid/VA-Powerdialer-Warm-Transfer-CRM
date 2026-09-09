@@ -87,10 +87,25 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+-- Admin-visible troubleshooting log for call setup/webhook activity (the admin is also the
+-- developer here) — see services/logger.js. Not an audit log of every HTTP request, just the
+-- call-related events and failures worth being able to look back at.
+CREATE TABLE IF NOT EXISTS logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  level TEXT NOT NULL DEFAULT 'info' CHECK (level IN ('info','warn','error')),
+  source TEXT,
+  message TEXT NOT NULL,
+  call_log_id INTEGER REFERENCES call_logs(id),
+  detail TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_call_logs_lead_id ON call_logs(lead_id);
 CREATE INDEX IF NOT EXISTS idx_call_logs_conference_name ON call_logs(conference_name);
 CREATE INDEX IF NOT EXISTS idx_call_logs_vapi_call_id ON call_logs(vapi_call_id);
+CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_logs_call_log_id ON logs(call_log_id);
 `);
 
 // Lightweight migration for a `leads` table created before these columns existed — CREATE

@@ -2,6 +2,8 @@ const express = require('express');
 const twilio = require('twilio');
 const { db, getSetting } = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { toE164 } = require('../services/phone');
+const { logInfo, logError } = require('../services/logger');
 const {
   getClient,
   baseUrl,
@@ -48,11 +50,18 @@ async function beginLeadDial(callLog) {
   if (callLog.lead_dial_started) return;
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(callLog.lead_id);
   if (!lead) return;
-  const leadCall = await startLeadCall(callLog, lead);
+
+  const normalizedPhone = toE164(lead.phone_number);
+  if (!normalizedPhone) {
+    throw new Error(`Lead #${lead.id}'s phone number "${lead.phone_number}" is not a valid phone number`);
+  }
+
+  const leadCall = await startLeadCall(callLog, { ...lead, phone_number: normalizedPhone });
   db.prepare('UPDATE call_logs SET lead_call_sid = ?, lead_dial_started = 1 WHERE id = ?').run(
     leadCall.sid,
     callLog.id
   );
+  logInfo('twilio', `Dialing lead #${lead.id} (${normalizedPhone}) into conference`, { callLogId: callLog.id });
 }
 
 // ---------------------------------------------------------------------------
@@ -73,8 +82,17 @@ router.post('/start-call', requireAuth, async (req, res) => {
   if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
   const agent = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
-  if (channel === 'phone' && !agent.phone_number) {
-    return res.status(400).json({ error: 'No "Call My Phone" number is on file for this agent — ask an admin to set one.' });
+  let agentPhone = null;
+  if (channel === 'phone') {
+    if (!agent.phone_number) {
+      return res.status(400).json({ error: 'No "Call My Phone" number is on file for this agent — ask an admin to set one.' });
+    }
+    agentPhone = toE164(agent.phone_number);
+    if (!agentPhone) {
+      const message = `Agent ${agent.username}'s "Call My Phone" number "${agent.phone_number}" is not a valid phone number.`;
+      logError('twilio', message, { detail: { userId: agent.id } });
+      return res.status(400).json({ error: message });
+    }
   }
 
   const conferenceName = `conf_${lead_id}_${Date.now()}`;
@@ -88,11 +106,13 @@ router.post('/start-call', requireAuth, async (req, res) => {
 
   try {
     if (channel === 'phone') {
-      const call = await dialIntoConference({ to: agent.phone_number, role: 'va', callLogId });
+      const call = await dialIntoConference({ to: agentPhone, role: 'va', callLogId });
       db.prepare('UPDATE call_logs SET agent_call_sid = ? WHERE id = ?').run(call.sid, callLogId);
     }
+    logInfo('twilio', `Started ${channel} call for lead #${lead_id}`, { callLogId });
     res.status(201).json({ call_log_id: callLogId, conference_name: conferenceName });
   } catch (err) {
+    logError('twilio', `Failed to place ${channel} call for lead #${lead_id}: ${err.message}`, { callLogId });
     res.status(502).json({ error: `Failed to place call: ${err.message}`, call_log_id: callLogId });
   }
 });
@@ -120,8 +140,7 @@ router.post('/outbound', formParser, validateTwilioSignature, async (req, res) =
   try {
     await beginLeadDial(callLog);
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to dial lead:', err.message);
+    logError('twilio', `Failed to dial lead for call_log #${callLog.id}: ${err.message}`, { callLogId: callLog.id });
   }
 
   const twiml = conferenceTwiml(callLog.conference_name, { endConferenceOnExit: false });
@@ -154,8 +173,7 @@ router.post('/call-status', formParser, validateTwilioSignature, async (req, res
     try {
       await beginLeadDial(getCallLog(callLog.id));
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to dial lead:', err.message);
+      logError('twilio', `Failed to dial lead for call_log #${callLog.id}: ${err.message}`, { callLogId: callLog.id });
     }
   }
 
@@ -185,8 +203,14 @@ router.post('/transfer', requireAuth, async (req, res) => {
   const callLog = getCallLog(call_log_id);
   if (!callLog) return res.status(404).json({ error: 'Call log not found' });
 
-  const transferTarget = getSetting('transfer_target_phone');
-  if (!transferTarget) return res.status(400).json({ error: 'No transfer target phone number is configured.' });
+  const rawTarget = getSetting('transfer_target_phone');
+  if (!rawTarget) return res.status(400).json({ error: 'No transfer target phone number is configured.' });
+  const transferTarget = toE164(rawTarget);
+  if (!transferTarget) {
+    const message = `The configured Transfer Target phone number "${rawTarget}" is not valid — fix it in Admin > Settings.`;
+    logError('twilio', message, { callLogId: callLog.id });
+    return res.status(400).json({ error: message });
+  }
 
   try {
     const call = await dialIntoConference({ to: transferTarget, role: 'admin', callLogId: callLog.id });
@@ -195,8 +219,10 @@ router.post('/transfer', requireAuth, async (req, res) => {
       transferTarget,
       callLog.id
     );
+    logInfo('twilio', `Warm transfer started for call_log #${callLog.id} -> ${transferTarget}`, { callLogId: callLog.id });
     res.json({ ok: true, transferred_to: transferTarget });
   } catch (err) {
+    logError('twilio', `Transfer failed for call_log #${callLog.id}: ${err.message}`, { callLogId: callLog.id });
     res.status(502).json({ error: err.message });
   }
 });
@@ -214,6 +240,7 @@ router.post('/hold', requireAuth, async (req, res) => {
     });
     res.json({ ok: true, hold: Boolean(hold) });
   } catch (err) {
+    logError('twilio', `Hold toggle failed for call_log #${call_log_id}: ${err.message}`, { callLogId: call_log_id });
     res.status(502).json({ error: err.message });
   }
 });
@@ -228,6 +255,7 @@ router.post('/mute-self', requireAuth, async (req, res) => {
     await getClient().conferences(conferenceSid).participants(callLog.agent_call_sid).update({ muted: Boolean(muted) });
     res.json({ ok: true, muted: Boolean(muted) });
   } catch (err) {
+    logError('twilio', `Mute-self failed for call_log #${call_log_id}: ${err.message}`, { callLogId: call_log_id });
     res.status(502).json({ error: err.message });
   }
 });
@@ -242,8 +270,10 @@ router.post('/complete-transfer', requireAuth, async (req, res) => {
   try {
     const conferenceSid = await getConferenceSid(callLog);
     await getClient().conferences(conferenceSid).participants(callLog.agent_call_sid).update({ status: 'completed' });
+    logInfo('twilio', `Complete-transfer: VA left call_log #${call_log_id}`, { callLogId: call_log_id });
     res.json({ ok: true });
   } catch (err) {
+    logError('twilio', `Complete-transfer failed for call_log #${call_log_id}: ${err.message}`, { callLogId: call_log_id });
     res.status(502).json({ error: err.message });
   }
 });
@@ -260,8 +290,10 @@ router.post('/hangup', requireAuth, async (req, res) => {
     if (conferenceSid) {
       await getClient().conferences(conferenceSid).update({ status: 'completed' });
     }
+    logInfo('twilio', `Hangup: ended call_log #${callLog.id}`, { callLogId: callLog.id });
     res.json({ ok: true });
   } catch (err) {
+    logError('twilio', `Hangup failed for call_log #${callLog.id}: ${err.message}`, { callLogId: callLog.id });
     res.status(502).json({ error: err.message });
   }
 });

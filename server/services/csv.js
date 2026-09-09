@@ -1,6 +1,7 @@
 const { parse } = require('csv-parse/sync');
 const { stringify } = require('csv-stringify/sync');
 const { db } = require('../db');
+const { toE164 } = require('./phone');
 
 // CSV header -> leads column. Matching is case-insensitive and ignores surrounding whitespace.
 const COLUMN_MAP = {
@@ -82,9 +83,16 @@ function insertMappedRows(mappedRows) {
 
   const run = db.transaction((rows) => {
     rows.forEach(({ rowNum, mapped }) => {
+      const rawPhone = mapped.phone_number;
+      mapped.phone_number = toE164(rawPhone);
       if (!mapped.phone_number) {
         skipped += 1;
-        errors.push({ row: rowNum, reason: 'Missing phone_number' });
+        errors.push({
+          row: rowNum,
+          reason: rawPhone
+            ? `Invalid phone_number "${rawPhone}" — could not be parsed as a phone number`
+            : 'Missing phone_number',
+        });
         return;
       }
       insert.run(mapped);

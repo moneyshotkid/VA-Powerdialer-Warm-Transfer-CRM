@@ -2,6 +2,8 @@ const express = require('express');
 const { db, getSetting } = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { applyOutcome } = require('../services/leads');
+const { toE164 } = require('../services/phone');
+const { logInfo, logWarn, logError } = require('../services/logger');
 const vapiClient = require('../services/vapiClient');
 
 const router = express.Router();
@@ -10,6 +12,18 @@ router.get('/vapi/assistants', requireAdmin, async (req, res) => {
   try {
     const assistants = await vapiClient.listAssistants();
     res.json(assistants);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Lets the Admin Settings UI pick a real phoneNumberId from a dropdown instead of typing one
+// in by hand — Vapi requires it to be an exact UUID, so a mistyped/pasted value fails at
+// call time with a fairly opaque "phoneNumberId must be a UUID" error.
+router.get('/vapi/phone-numbers', requireAdmin, async (req, res) => {
+  try {
+    const numbers = await vapiClient.listPhoneNumbers();
+    res.json(numbers);
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
@@ -28,6 +42,16 @@ router.post('/voice/start-vapi-call', requireAuth, async (req, res) => {
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(lead_id);
   if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
+  // Leads created before phone normalization was added (or edited outside the app) could
+  // still have a non-E.164 number — catch that here with a clear error instead of letting
+  // Vapi's API reject it with a message that doesn't say which lead caused it.
+  const normalizedPhone = toE164(lead.phone_number);
+  if (!normalizedPhone) {
+    const message = `Lead #${lead.id}'s phone number "${lead.phone_number}" is not a valid phone number — fix it in Admin > Leads > Manage before calling.`;
+    logError('vapi', message, { detail: { leadId: lead.id, rawPhone: lead.phone_number } });
+    return res.status(400).json({ error: message });
+  }
+
   const info = db
     .prepare(
       `INSERT INTO call_logs (lead_id, agent_id, channel, status)
@@ -37,10 +61,20 @@ router.post('/voice/start-vapi-call', requireAuth, async (req, res) => {
   const callLogId = info.lastInsertRowid;
 
   try {
-    const call = await vapiClient.createCall({ assistantId, phoneNumberId, lead, callLogId });
+    const call = await vapiClient.createCall({
+      assistantId,
+      phoneNumberId,
+      lead: { ...lead, phone_number: normalizedPhone },
+      callLogId,
+    });
     db.prepare('UPDATE call_logs SET vapi_call_id = ? WHERE id = ?').run(call.id, callLogId);
+    logInfo('vapi', `Started Vapi call for lead #${lead.id}`, { callLogId, detail: { vapi_call_id: call.id } });
     res.status(201).json({ call_log_id: callLogId, vapi_call_id: call.id });
   } catch (err) {
+    logError('vapi', `Failed to start Vapi call for lead #${lead.id}: ${err.message}`, {
+      callLogId,
+      detail: { assistantId, phoneNumberId, error: err.message },
+    });
     res.status(502).json({ error: `Failed to start Vapi call: ${err.message}`, call_log_id: callLogId });
   }
 });
@@ -57,12 +91,14 @@ router.post('/webhooks/vapi', express.json(), (req, res) => {
 
   switch (message.type) {
     case 'status-update':
+      logInfo('vapi-webhook', `status-update: ${message.status}`, { callLogId, detail: message });
       if (callLogId) {
         db.prepare('UPDATE call_logs SET status = ? WHERE id = ?').run(message.status || 'in-progress', callLogId);
       }
       return res.sendStatus(200);
 
     case 'end-of-call-report': {
+      logInfo('vapi-webhook', 'end-of-call-report received', { callLogId, detail: { endedReason: message.endedReason } });
       if (callLogId) {
         const transcript = message.transcript || message.summary || null;
         const duration = message.durationSeconds || message.call?.durationSeconds || null;
@@ -82,11 +118,14 @@ router.post('/webhooks/vapi', express.json(), (req, res) => {
         if (name === 'log_lead_outcome' && callLogId) {
           try {
             applyOutcome(callLogId, toolCall.arguments || toolCall.parameters || {});
+            logInfo('vapi-webhook', 'log_lead_outcome applied', { callLogId, detail: toolCall.arguments || toolCall.parameters });
             return { toolCallId, result: 'logged' };
           } catch (err) {
+            logError('vapi-webhook', `log_lead_outcome failed: ${err.message}`, { callLogId, detail: err.message });
             return { toolCallId, result: `error: ${err.message}` };
           }
         }
+        logWarn('vapi-webhook', `Unknown tool call: ${name}`, { callLogId });
         return { toolCallId, result: 'ignored: unknown tool' };
       });
       return res.json({ results });

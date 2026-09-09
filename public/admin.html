@@ -22,6 +22,7 @@
       <button data-tab="calllogs">Call Logs</button>
       <button data-tab="users">Users</button>
       <button data-tab="settings">Settings</button>
+      <button data-tab="logs">Logs</button>
     </div>
 
     <!-- Leads tab -->
@@ -228,13 +229,46 @@
           <form id="vapi-settings-form">
             <label>Assistant</label>
             <select id="vapi-assistant"><option value="">— none —</option></select>
-            <label>Phone Number ID</label>
-            <input id="vapi-phone-number-id" placeholder="Vapi phone number id" />
+            <label>Phone Number</label>
+            <select id="vapi-phone-number"><option value="">— none —</option></select>
+            <p class="hint">Pick from your Vapi account rather than typing an id — Vapi rejects anything that isn't the exact UUID.</p>
             <div class="controls-row">
               <button type="submit" class="primary">Save</button>
               <button type="button" id="vapi-load-assistants">Load assistants from Vapi</button>
+              <button type="button" id="vapi-load-phone-numbers">Load phone numbers from Vapi</button>
             </div>
           </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Logs tab -->
+    <section id="tab-logs" hidden>
+      <div class="card">
+        <h2>Call Troubleshooting Logs</h2>
+        <p class="hint">Call setup attempts, Twilio/Vapi API errors, and webhook activity — for diagnosing why a specific call failed.</p>
+        <div class="controls-row">
+          <select id="logs-level-filter">
+            <option value="">All levels</option>
+            <option value="error">Error</option>
+            <option value="warn">Warn</option>
+            <option value="info">Info</option>
+          </select>
+          <select id="logs-source-filter">
+            <option value="">All sources</option>
+            <option value="twilio">twilio</option>
+            <option value="vapi">vapi</option>
+            <option value="vapi-webhook">vapi-webhook</option>
+          </select>
+          <button id="logs-refresh-btn">Refresh</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table id="logs-table">
+            <thead>
+              <tr><th>Time</th><th>Level</th><th>Source</th><th>Call Log</th><th>Message</th><th>Detail</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
       </div>
     </section>
