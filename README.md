@@ -63,6 +63,17 @@ The app seeds a default admin user on first boot from `ADMIN_USERNAME`/`ADMIN_PA
 Without a reachable `PUBLIC_BASE_URL`, everything except actually ringing a phone works and
 can be verified locally (auth, CSV import/export, queue logic, TwiML generation via `curl`).
 
+**A note on tunnel reliability (ngrok, Tailscale Funnel, etc.):** every call leg and
+conference here only subscribes to the Twilio webhook events the app actually reads
+(`answered`/`completed` on a call, nothing on a conference — its SID is fetched lazily via
+a REST call instead), specifically to keep inbound webhook volume low. Some tunnels — Funnel
+in particular — can only proxy a small number of truly concurrent inbound requests before
+bouncing the rest with a `502` (visible in the Twilio Console's Debugger as
+`Got HTTP 502 response to ...`); a fast-changing call (several status events within a couple
+of seconds) can trip this even with that reduced volume. If you see `502`s recur in the
+Debugger, it's the tunnel's ingress, not this app — keeping the tunnel process alive and not
+sleeping the machine helps, but a properly hosted deployment is the real fix if it persists.
+
 ### Vapi AI assistant configuration (optional)
 
 The "AI Assistant" dialer channel stays hidden until this is set up:

@@ -48,7 +48,14 @@ function startLeadCall(callLog, lead) {
     from: process.env.TWILIO_CALLER_ID,
     url: `${baseUrl()}/api/voice/join?role=lead&callLogId=${callLog.id}`,
     statusCallback: `${baseUrl()}/api/voice/call-status?role=lead&callLogId=${callLog.id}`,
-    statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+    // Only these two are actually consumed by /api/voice/call-status (an 'answered' VA leg
+    // on the phone-bridge channel triggers dialing the lead; 'completed' finalizes
+    // duration/timestamps) — 'initiated'/'ringing' were dead weight, and every SID this
+    // webhook could tell us is already captured synchronously from this very call's REST
+    // response anyway. Trimmed to cut Twilio's webhook volume roughly in half per call leg,
+    // which matters on constrained ingress (e.g. a Tailscale Funnel tunnel that can only
+    // proxy one or two concurrent requests before bouncing the rest with a 502).
+    statusCallbackEvent: ['answered', 'completed'],
   });
 }
 
@@ -59,7 +66,14 @@ function dialIntoConference({ to, role, callLogId }) {
     from: process.env.TWILIO_CALLER_ID,
     url: `${baseUrl()}/api/voice/join?role=${role}&callLogId=${callLogId}`,
     statusCallback: `${baseUrl()}/api/voice/call-status?role=${role}&callLogId=${callLogId}`,
-    statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+    // Only these two are actually consumed by /api/voice/call-status (an 'answered' VA leg
+    // on the phone-bridge channel triggers dialing the lead; 'completed' finalizes
+    // duration/timestamps) — 'initiated'/'ringing' were dead weight, and every SID this
+    // webhook could tell us is already captured synchronously from this very call's REST
+    // response anyway. Trimmed to cut Twilio's webhook volume roughly in half per call leg,
+    // which matters on constrained ingress (e.g. a Tailscale Funnel tunnel that can only
+    // proxy one or two concurrent requests before bouncing the rest with a 502).
+    statusCallbackEvent: ['answered', 'completed'],
   });
 }
 
@@ -67,12 +81,18 @@ function conferenceTwiml(conferenceName, { endConferenceOnExit }) {
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const twiml = new VoiceResponse();
   const dial = twiml.dial();
+  // No statusCallback here on purpose: the only thing anything in this app ever read from
+  // those events was the conference SID on 'start' — and routes/voice.js's
+  // getConferenceSid() already looks that up via a REST call (client.conferences.list())
+  // the first time hold/mute/transfer/hangup needs it, caching it from then on. That REST
+  // call is outbound from our server to Twilio, so it never touches inbound webhook
+  // ingress — unlike this statusCallback, which used to fire up to ~7 times per conference
+  // (start + a join/leave per participant + end) for no functional benefit, adding load to
+  // constrained ingress (e.g. a Tailscale Funnel tunnel) for nothing.
   dial.conference(
     {
       startConferenceOnEnter: true,
       endConferenceOnExit,
-      statusCallback: `${baseUrl()}/api/voice/conference-status`,
-      statusCallbackEvent: ['start', 'end', 'join', 'leave'],
     },
     conferenceName
   );

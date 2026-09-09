@@ -186,14 +186,6 @@ router.post('/call-status', formParser, validateTwilioSignature, async (req, res
   res.sendStatus(200);
 });
 
-router.post('/conference-status', formParser, validateTwilioSignature, (req, res) => {
-  const { ConferenceSid, FriendlyName, StatusCallbackEvent } = req.body;
-  if (StatusCallbackEvent === 'conference-start' || StatusCallbackEvent === 'start') {
-    db.prepare('UPDATE call_logs SET conference_sid = ? WHERE conference_name = ?').run(ConferenceSid, FriendlyName);
-  }
-  res.sendStatus(200);
-});
-
 // ---------------------------------------------------------------------------
 // In-call REST controls (requires an authenticated session)
 // ---------------------------------------------------------------------------
