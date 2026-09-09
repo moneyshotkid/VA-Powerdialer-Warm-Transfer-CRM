@@ -165,4 +165,51 @@ function exportCallLogsCsv() {
   });
 }
 
-module.exports = { parseLeadsCsv, exportCallLogsCsv };
+// Full-record export — every column CSV import can populate, in the same order as the
+// header-based import's documented column list, so an export round-trips back through
+// parseHeaderedCsv() unchanged.
+function exportLeadsCsv() {
+  const rows = db.prepare('SELECT * FROM leads ORDER BY created_at DESC').all();
+  const mapped = rows.map((l) => ({
+    number: l.external_id,
+    phone_number: l.phone_number,
+    contact_person: l.contact_person,
+    contact_title: l.contact_title,
+    email: l.email,
+    company: l.company,
+    address: l.address,
+    category: l.category,
+    city: l.city,
+    website: l.website,
+    notes: l.notes,
+    name: l.name,
+    callback_appt: l.callback_appt,
+    assistant: l.assistant,
+    rating: l.rating,
+    review_count: l.review_count,
+    review_bucket: l.review_bucket,
+    latest_review_age_days: l.latest_review_age_days,
+    is_unclaimed: l.is_unclaimed == null ? '' : l.is_unclaimed ? 'true' : 'false',
+    maps_url: l.maps_url,
+    facebook: l.facebook,
+    instagram: l.instagram,
+    linkedin: l.linkedin,
+    status: l.status,
+    last_outcome: l.last_outcome,
+    created_at: l.created_at,
+    updated_at: l.updated_at,
+  }));
+
+  return stringify(mapped, {
+    header: true,
+    columns: [
+      'number', 'phone_number', 'contact_person', 'contact_title', 'email', 'company',
+      'address', 'category', 'city', 'website', 'notes', 'name', 'callback_appt', 'assistant',
+      'rating', 'review_count', 'review_bucket', 'latest_review_age_days', 'is_unclaimed',
+      'maps_url', 'facebook', 'instagram', 'linkedin', 'status', 'last_outcome',
+      'created_at', 'updated_at',
+    ],
+  });
+}
+
+module.exports = { parseLeadsCsv, exportCallLogsCsv, exportLeadsCsv };

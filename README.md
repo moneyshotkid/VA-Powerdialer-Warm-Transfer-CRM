@@ -6,10 +6,12 @@ assistant (Vapi) dialer channel.
 
 ## Features
 
-- **Admin Dashboard**: CSV lead import; a leads table (company, category, city, website,
-  status, last outcome, rating, reviews, callback, notes) with status filters and a
-  **Manage** drill-down form per lead exposing every stored field for editing; call log &
-  analytics table with CSV export; agent user management; warm-transfer target configuration.
+- **Admin Dashboard**: CSV lead import/export; a leads table (company, category, city,
+  website, status, last outcome, rating, reviews, callback, notes) with status filters, a
+  **Manage** drill-down form per lead exposing every stored field for editing, per-lead
+  **Delete**, and a type-`DELETE`-to-confirm **Delete All Leads** (both delete that lead's
+  call log history along with it); call log & analytics table with CSV export; agent user
+  management; warm-transfer target configuration.
 - **VA Power Dialer**: visual queue, lead context panel, outcome/notes form with auto-advance,
   Twilio WebRTC controls (mute, hangup, warm transfer, hold/mute the prospect, complete
   transfer).

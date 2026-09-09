@@ -55,6 +55,10 @@
             <input id="lead-search" placeholder="Search name/company/phone…" />
             <button id="lead-refresh-btn">Refresh</button>
           </div>
+          <div class="controls-row">
+            <a href="/api/leads/export"><button type="button">Export All Leads (CSV)</button></a>
+            <button id="delete-all-leads-btn" class="danger">Delete All Leads</button>
+          </div>
           <div style="overflow-x:auto">
             <table id="leads-table">
               <thead>

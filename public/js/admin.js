@@ -1,4 +1,4 @@
-import { get, post, put } from './api.js';
+import { get, post, put, del } from './api.js';
 
 function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, (c) => ({
@@ -53,16 +53,54 @@ async function loadLeads() {
         <td>${l.review_count != null ? escapeHtml(l.review_count) : ''}${l.review_bucket ? ` (${escapeHtml(l.review_bucket)})` : ''}</td>
         <td>${escapeHtml(l.callback_appt)}</td>
         <td>${escapeHtml(l.notes)}</td>
-        <td><button data-manage="${l.id}">Manage</button></td>
+        <td>
+          <button data-manage="${l.id}">Manage</button>
+          <button data-delete="${l.id}" class="danger">Delete</button>
+        </td>
       </tr>`
     )
     .join('');
   tbody.querySelectorAll('[data-manage]').forEach((btn) => {
     btn.addEventListener('click', () => openLeadForm(Number(btn.dataset.manage)));
   });
+  tbody.querySelectorAll('[data-delete]').forEach((btn) => {
+    btn.addEventListener('click', () => deleteLead(Number(btn.dataset.delete)));
+  });
 }
 document.getElementById('lead-refresh-btn').addEventListener('click', loadLeads);
 document.getElementById('lead-status-filter').addEventListener('change', loadLeads);
+
+async function deleteLead(id) {
+  if (!window.confirm('Delete this lead? This also permanently deletes its call log history. This cannot be undone.')) return;
+  try {
+    await del(`/api/leads/${id}`);
+    document.getElementById('lead-form').hidden = true;
+    document.getElementById('lead-form-empty').hidden = false;
+    loadLeads();
+  } catch (err) {
+    alert(`Could not delete lead: ${err.message}`);
+  }
+}
+
+document.getElementById('delete-all-leads-btn').addEventListener('click', async () => {
+  const typed = window.prompt(
+    'This permanently deletes EVERY lead and ALL call log history. This cannot be undone.\n\nType DELETE to confirm:'
+  );
+  if (typed === null) return; // cancelled
+  if (typed !== 'DELETE') {
+    alert('Did not match "DELETE" exactly — nothing was deleted.');
+    return;
+  }
+  try {
+    const result = await del('/api/leads', { confirm: 'DELETE' });
+    document.getElementById('lead-form').hidden = true;
+    document.getElementById('lead-form-empty').hidden = false;
+    loadLeads();
+    alert(`Deleted ${result.deleted} lead(s).`);
+  } catch (err) {
+    alert(`Could not delete all leads: ${err.message}`);
+  }
+});
 
 // --- Lead drill-down / manage form ---------------------------------------
 

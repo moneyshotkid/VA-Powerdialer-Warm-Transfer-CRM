@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const { db } = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
-const { parseLeadsCsv, exportCallLogsCsv } = require('../services/csv');
+const { parseLeadsCsv, exportCallLogsCsv, exportLeadsCsv } = require('../services/csv');
 const { applyOutcome, claimNextLead } = require('../services/leads');
 
 const router = express.Router();
@@ -41,6 +41,29 @@ router.get('/', (req, res) => {
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const leads = db.prepare(`SELECT * FROM leads ${where} ORDER BY created_at DESC LIMIT 500`).all(...params);
   res.json(leads);
+});
+
+router.get('/export', requireAdmin, (req, res) => {
+  const csv = exportLeadsCsv();
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="leads.csv"');
+  res.send(csv);
+});
+
+// Deletes every lead AND every call log (call_logs.lead_id has no independent meaning once
+// its lead is gone) — unconditional, not scoped to any status filter. Requires an explicit
+// { confirm: "DELETE" } in the body as a server-side guard against an accidental bare
+// DELETE request, on top of whatever confirmation the UI itself asks for.
+router.delete('/', requireAdmin, (req, res) => {
+  if ((req.body || {}).confirm !== 'DELETE') {
+    return res.status(400).json({ error: 'Send { "confirm": "DELETE" } to confirm deleting every lead.' });
+  }
+  const deleteAll = db.transaction(() => {
+    db.prepare('DELETE FROM call_logs').run();
+    return db.prepare('DELETE FROM leads').run().changes;
+  });
+  const deleted = deleteAll();
+  res.json({ ok: true, deleted });
 });
 
 router.get('/call-logs', (req, res) => {
@@ -157,6 +180,20 @@ router.put('/:id', requireAdmin, (req, res) => {
   ).run({ ...values, __id: lead.id });
 
   res.json(db.prepare('SELECT * FROM leads WHERE id = ?').get(lead.id));
+});
+
+// Cascades to that lead's call_logs too — see the comment on DELETE / above for why.
+router.delete('/:id', requireAdmin, (req, res) => {
+  const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+  const deleteOne = db.transaction((id) => {
+    db.prepare('DELETE FROM call_logs WHERE lead_id = ?').run(id);
+    db.prepare('DELETE FROM leads WHERE id = ?').run(id);
+  });
+  deleteOne(lead.id);
+
+  res.json({ ok: true });
 });
 
 module.exports = router;
