@@ -6,6 +6,11 @@ const { toE164 } = require('../services/phone');
 
 const router = express.Router();
 
+// Vapi assistant/phone-number ids are UUIDs — Vapi's own API rejects anything else with a
+// fairly opaque "phoneNumberId must be a UUID" error, so catch it here at save time instead,
+// pointing the admin at the "Load ... from Vapi" picker rather than typing an id by hand.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const USER_FIELDS = 'id, username, role, display_name, twilio_identity, phone_number, created_at';
 
 // All routes here are admin-only: agent identities, the "Call My Phone" number, and the
@@ -83,9 +88,23 @@ router.put('/settings', (req, res) => {
     }
     setSetting('transfer_target_phone', normalized);
   }
-  if (vapi_assistant_id !== undefined) setSetting('vapi_assistant_id', vapi_assistant_id);
+  if (vapi_assistant_id !== undefined) {
+    if (vapi_assistant_id && !UUID_RE.test(vapi_assistant_id)) {
+      return res.status(400).json({
+        error: `"${vapi_assistant_id}" doesn't look like a Vapi assistant id (should be a UUID) — click "Load assistants from Vapi" and pick one from the list instead of typing it in.`,
+      });
+    }
+    setSetting('vapi_assistant_id', vapi_assistant_id);
+  }
   if (vapi_assistant_name !== undefined) setSetting('vapi_assistant_name', vapi_assistant_name);
-  if (vapi_phone_number_id !== undefined) setSetting('vapi_phone_number_id', vapi_phone_number_id);
+  if (vapi_phone_number_id !== undefined) {
+    if (vapi_phone_number_id && !UUID_RE.test(vapi_phone_number_id)) {
+      return res.status(400).json({
+        error: `"${vapi_phone_number_id}" doesn't look like a Vapi phoneNumberId (should be a UUID) — click "Load phone numbers from Vapi" and pick one from the list instead of typing it in.`,
+      });
+    }
+    setSetting('vapi_phone_number_id', vapi_phone_number_id);
+  }
   if (vapi_phone_number_label !== undefined) setSetting('vapi_phone_number_label', vapi_phone_number_label);
 
   res.json({ ok: true });

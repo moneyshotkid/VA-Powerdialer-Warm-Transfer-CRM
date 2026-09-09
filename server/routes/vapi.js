@@ -8,6 +8,11 @@ const vapiClient = require('../services/vapiClient');
 
 const router = express.Router();
 
+// Same check as routes/users.js's settings save — kept here too as a defensive re-check in
+// case a bad value was already stored before that validation existed (this app has gone
+// through versions where the id was a free-text field).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 router.get('/vapi/assistants', requireAdmin, async (req, res) => {
   try {
     const assistants = await vapiClient.listAssistants();
@@ -37,6 +42,14 @@ router.post('/voice/start-vapi-call', requireAuth, async (req, res) => {
   const phoneNumberId = getSetting('vapi_phone_number_id');
   if (!assistantId || !phoneNumberId) {
     return res.status(400).json({ error: 'AI Assistant calling is not configured yet — set it up in Admin Settings.' });
+  }
+  if (!UUID_RE.test(assistantId) || !UUID_RE.test(phoneNumberId)) {
+    const message =
+      'The AI Assistant / Phone Number configured in Admin > Settings is not a valid Vapi id — ' +
+      'open Settings, click "Load assistants from Vapi" and "Load phone numbers from Vapi", ' +
+      'pick both from the dropdowns (don\'t type an id in by hand), and Save again.';
+    logError('vapi', message, { detail: { assistantId, phoneNumberId } });
+    return res.status(400).json({ error: message });
   }
 
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(lead_id);
