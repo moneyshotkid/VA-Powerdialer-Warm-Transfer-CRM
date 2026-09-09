@@ -191,9 +191,21 @@ function renderLead(lead) {
 }
 
 async function claimNextLead() {
+  // Release whatever lead is currently claimed but wasn't acted on (no outcome saved) —
+  // otherwise repeated "Next Lead" clicks lock leads to this agent without ever freeing
+  // them, and a small pool quickly starts returning null even though those same leads are
+  // still visible (and "pending") in the queue sidebar, which only hides locked-elsewhere
+  // leads, not leads locked to you.
+  if (state.currentLead) {
+    await post('/api/queue/release', { lead_id: state.currentLead.id }).catch(() => {});
+  }
+
   const lead = await get('/api/queue/next');
   renderLead(lead);
   loadQueueList();
+  if (!lead) {
+    setStatus('Queue is empty — no pending leads available right now. (Leads already claimed by an agent stay locked for up to 5 minutes.)');
+  }
   return lead;
 }
 
