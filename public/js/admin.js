@@ -8,14 +8,8 @@ function escapeHtml(str) {
 
 function socialLink(url, label) {
   if (!url) return '';
-  const href = escapeHtml(url);
+  const href = escapeHtml(/^https?:\/\//i.test(url) ? url : `https://${url}`);
   return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-}
-
-function leadLinksHtml(l) {
-  return [socialLink(l.maps_url, 'Maps'), socialLink(l.facebook, 'FB'), socialLink(l.instagram, 'IG'), socialLink(l.linkedin, 'LI')]
-    .filter(Boolean)
-    .join(' · ');
 }
 
 // --- Tabs ---------------------------------------------------------------
@@ -49,23 +43,86 @@ async function loadLeads() {
   tbody.innerHTML = leads
     .map(
       (l) => `<tr>
-        <td>${escapeHtml(l.name)}</td>
         <td>${escapeHtml(l.company)}</td>
-        <td>${escapeHtml(l.phone_number)}</td>
+        <td>${escapeHtml(l.category)}</td>
+        <td>${escapeHtml(l.city)}</td>
+        <td>${socialLink(l.website, l.website) || ''}</td>
         <td><span class="badge ${l.status}">${l.status}</span></td>
+        <td>${escapeHtml(l.last_outcome)}</td>
         <td>${l.rating != null ? escapeHtml(l.rating) : ''}</td>
         <td>${l.review_count != null ? escapeHtml(l.review_count) : ''}${l.review_bucket ? ` (${escapeHtml(l.review_bucket)})` : ''}</td>
-        <td>${l.is_unclaimed == null ? '' : l.is_unclaimed ? 'Yes' : 'No'}</td>
-        <td>${escapeHtml(l.assistant)}</td>
         <td>${escapeHtml(l.callback_appt)}</td>
-        <td>${leadLinksHtml(l)}</td>
         <td>${escapeHtml(l.notes)}</td>
+        <td><button data-manage="${l.id}">Manage</button></td>
       </tr>`
     )
     .join('');
+  tbody.querySelectorAll('[data-manage]').forEach((btn) => {
+    btn.addEventListener('click', () => openLeadForm(Number(btn.dataset.manage)));
+  });
 }
 document.getElementById('lead-refresh-btn').addEventListener('click', loadLeads);
 document.getElementById('lead-status-filter').addEventListener('change', loadLeads);
+
+// --- Lead drill-down / manage form ---------------------------------------
+
+const LEAD_FORM_FIELDS = [
+  'external_id', 'phone_number', 'name', 'contact_person', 'contact_title', 'email',
+  'company', 'address', 'category', 'city', 'website', 'maps_url', 'facebook', 'instagram',
+  'linkedin', 'rating', 'review_count', 'review_bucket', 'latest_review_age_days', 'assistant',
+  'callback_appt', 'status', 'last_outcome', 'notes',
+];
+
+function toDatetimeLocalValue(value) {
+  // callback_appt may be stored as "YYYY-MM-DD HH:MM:SS" (from datetime('now')-style writes)
+  // or "YYYY-MM-DDTHH:MM" (already what <input type="datetime-local"> expects) — normalize.
+  if (!value) return '';
+  return value.replace(' ', 'T').slice(0, 16);
+}
+
+async function openLeadForm(id) {
+  const errorEl = document.getElementById('lead-form-error');
+  errorEl.textContent = '';
+  try {
+    const lead = await get(`/api/leads/${id}`);
+    document.getElementById('lead-form-empty').hidden = true;
+    document.getElementById('lead-form').hidden = false;
+    document.getElementById('lf-id').value = lead.id;
+    for (const field of LEAD_FORM_FIELDS) {
+      const el = document.getElementById(`lf-${field}`);
+      if (!el) continue;
+      el.value = field === 'callback_appt' ? toDatetimeLocalValue(lead[field]) : (lead[field] ?? '');
+    }
+    document.getElementById('lf-is_unclaimed').checked = Boolean(lead.is_unclaimed);
+  } catch (err) {
+    errorEl.textContent = err.message;
+  }
+}
+
+document.getElementById('lead-form-cancel').addEventListener('click', () => {
+  document.getElementById('lead-form').hidden = true;
+  document.getElementById('lead-form-empty').hidden = false;
+});
+
+document.getElementById('lead-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('lead-form-error');
+  errorEl.textContent = '';
+  const id = document.getElementById('lf-id').value;
+  const payload = {};
+  for (const field of LEAD_FORM_FIELDS) {
+    const el = document.getElementById(`lf-${field}`);
+    if (el) payload[field] = el.value;
+  }
+  payload.is_unclaimed = document.getElementById('lf-is_unclaimed').checked;
+
+  try {
+    await put(`/api/leads/${id}`, payload);
+    loadLeads();
+  } catch (err) {
+    errorEl.textContent = err.message;
+  }
+});
 
 document.getElementById('upload-btn').addEventListener('click', async () => {
   const fileInput = document.getElementById('csv-file');

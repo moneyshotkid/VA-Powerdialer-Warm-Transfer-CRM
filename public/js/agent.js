@@ -139,7 +139,10 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
 async function loadQueueList() {
   const leads = await get('/api/queue?limit=25');
   els.queueList.innerHTML = leads
-    .map((l) => `<div class="queue-item">${escapeHtml(l.name || l.contact_person || '(no name)')} — ${escapeHtml(l.company)} — ${escapeHtml(l.phone_number)}</div>`)
+    .map((l) => {
+      const rating = l.rating != null ? `${l.rating}★ (${l.review_count ?? '?'})` : '';
+      return `<div class="queue-item">${escapeHtml(l.company || '(no company)')} — ${escapeHtml(l.category)} — ${escapeHtml(l.city)}${rating ? ` — ${escapeHtml(rating)}` : ''}</div>`;
+    })
     .join('') || '<div class="hint">Queue is empty.</div>';
 }
 

@@ -41,30 +41,109 @@
         <div id="upload-result" class="status-line"></div>
       </div>
 
-      <div class="card">
-        <h2>Leads</h2>
-        <div class="controls-row">
-          <select id="lead-status-filter">
-            <option value="">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="called">Called</option>
-            <option value="transferred">Transferred</option>
-            <option value="do_not_call">Do Not Call</option>
-          </select>
-          <input id="lead-search" placeholder="Search name/company/phone…" />
-          <button id="lead-refresh-btn">Refresh</button>
+      <div class="grid-3">
+        <div class="card">
+          <h2>Leads</h2>
+          <div class="controls-row">
+            <select id="lead-status-filter">
+              <option value="">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="called">Called</option>
+              <option value="transferred">Transferred</option>
+              <option value="do_not_call">Do Not Call</option>
+            </select>
+            <input id="lead-search" placeholder="Search name/company/phone…" />
+            <button id="lead-refresh-btn">Refresh</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table id="leads-table">
+              <thead>
+                <tr>
+                  <th>Company</th><th>Category</th><th>City</th><th>Website</th>
+                  <th>Status</th><th>Last Outcome</th><th>Rating</th><th>Reviews</th>
+                  <th>Callback</th><th>Notes</th><th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
         </div>
-        <div style="overflow-x:auto">
-          <table id="leads-table">
-            <thead>
-              <tr>
-                <th>Name</th><th>Company</th><th>Phone</th><th>Status</th>
-                <th>Rating</th><th>Reviews</th><th>Unclaimed</th><th>Assistant</th>
-                <th>Callback</th><th>Links</th><th>Notes</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+
+        <div class="card">
+          <h2>Manage Lead</h2>
+          <div id="lead-form-empty" class="hint">Click "Manage" on a lead to view/edit its full record.</div>
+          <form id="lead-form" hidden>
+            <input type="hidden" id="lf-id" />
+            <label>Phone Number (required)</label>
+            <input id="lf-phone_number" required />
+            <label>Name</label>
+            <input id="lf-name" />
+            <label>Contact Person</label>
+            <input id="lf-contact_person" />
+            <label>Contact Title</label>
+            <input id="lf-contact_title" />
+            <label>Email</label>
+            <input id="lf-email" type="email" />
+            <label>Company</label>
+            <input id="lf-company" />
+            <label>Category</label>
+            <input id="lf-category" />
+            <label>Address</label>
+            <input id="lf-address" />
+            <label>City</label>
+            <input id="lf-city" />
+            <label>Website</label>
+            <input id="lf-website" />
+            <label>Maps URL</label>
+            <input id="lf-maps_url" />
+            <label>Facebook</label>
+            <input id="lf-facebook" />
+            <label>Instagram</label>
+            <input id="lf-instagram" />
+            <label>LinkedIn</label>
+            <input id="lf-linkedin" />
+            <label>Rating</label>
+            <input id="lf-rating" type="number" step="0.1" min="0" max="5" />
+            <label>Review Count</label>
+            <input id="lf-review_count" type="number" min="0" />
+            <label>Review Bucket</label>
+            <input id="lf-review_bucket" />
+            <label>Latest Review Age (days)</label>
+            <input id="lf-latest_review_age_days" type="number" min="0" />
+            <label style="display:flex;align-items:center;gap:6px;margin-top:10px">
+              <input type="checkbox" id="lf-is_unclaimed" style="width:auto" />
+              Unclaimed listing
+            </label>
+            <label>Assistant</label>
+            <input id="lf-assistant" />
+            <label>External ID (source row id)</label>
+            <input id="lf-external_id" />
+            <label>Callback Appointment</label>
+            <input id="lf-callback_appt" type="datetime-local" />
+            <label>Status</label>
+            <select id="lf-status">
+              <option value="pending">Pending</option>
+              <option value="called">Called</option>
+              <option value="transferred">Transferred</option>
+              <option value="do_not_call">Do Not Call</option>
+            </select>
+            <label>Last Outcome</label>
+            <select id="lf-last_outcome">
+              <option value="">—</option>
+              <option>Answered</option>
+              <option>No Answer</option>
+              <option>Left Voicemail</option>
+              <option>Interested/Transferred</option>
+              <option>Do Not Call</option>
+            </select>
+            <label>Notes</label>
+            <textarea id="lf-notes" rows="4"></textarea>
+            <div class="controls-row">
+              <button type="submit" class="primary">Save</button>
+              <button type="button" id="lead-form-cancel">Cancel</button>
+            </div>
+            <div id="lead-form-error" class="error-text"></div>
+          </form>
         </div>
       </div>
     </section>
