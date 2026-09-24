@@ -7,3 +7,11 @@ server/data/*.sqlite-shm
 *.log
 .DS_Store
 server/data/
+awstats-icon
+awstatsicons
+icon/
+index2.html
+.well-known/
+*.bak.*
+public/js/*.bak.*
+server/routes/*.bak.*
