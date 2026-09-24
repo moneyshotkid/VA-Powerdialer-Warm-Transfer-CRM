@@ -6,3 +6,4 @@ server/data/*.sqlite-wal
 server/data/*.sqlite-shm
 *.log
 .DS_Store
+server/data/

@@ -156,7 +156,10 @@ router.all('/join', formParser, validateTwilioSignature, (req, res) => {
     res.type('text/xml').send(twiml.toString());
     return;
   }
-  const twiml = conferenceTwiml(callLog.conference_name, { endConferenceOnExit: role !== 'va' });
+  // Only the lead ends the conference on hangup. VA stays endConferenceOnExit=false
+  // (hangup route ends the conf explicitly). Transfer target stays false during consult so
+  // hanging up early does not drop the lead; complete-transfer flips target to true.
+  const twiml = conferenceTwiml(callLog.conference_name, { endConferenceOnExit: role === 'lead' });
   res.type('text/xml').send(twiml.toString());
 });
 
@@ -205,14 +208,24 @@ router.post('/transfer', requireAuth, async (req, res) => {
   }
 
   try {
+    // Consult/warm pattern: hold the lead first so VA can brief the transfer target privately.
+    if (!callLog.lead_call_sid) {
+      return res.status(409).json({ error: 'Lead is not yet connected — wait until they answer before transferring.' });
+    }
+    const conferenceSid = await getConferenceSid(callLog);
+    await getClient().conferences(conferenceSid).participants(callLog.lead_call_sid).update({
+      hold: true,
+      muted: true,
+    });
+
     const call = await dialIntoConference({ to: transferTarget, role: 'admin', callLogId: callLog.id });
     db.prepare('UPDATE call_logs SET transfer_call_sid = ?, transferred_to = ? WHERE id = ?').run(
       call.sid,
       transferTarget,
       callLog.id
     );
-    logInfo('twilio', `Warm transfer started for call_log #${callLog.id} -> ${transferTarget}`, { callLogId: callLog.id });
-    res.json({ ok: true, transferred_to: transferTarget });
+    logInfo('twilio', `Warm transfer started for call_log #${callLog.id} -> ${transferTarget} (lead on hold)`, { callLogId: callLog.id });
+    res.json({ ok: true, transferred_to: transferTarget, lead_held: true });
   } catch (err) {
     logError('twilio', `Transfer failed for call_log #${callLog.id}: ${err.message}`, { callLogId: callLog.id });
     res.status(502).json({ error: err.message });
@@ -252,8 +265,9 @@ router.post('/mute-self', requireAuth, async (req, res) => {
   }
 });
 
-// Complete Transfer: remove only the VA's own leg from the conference, leaving the lead and
-// the transfer target connected. Works the same whether the VA joined by browser or phone.
+// Complete Transfer: unhold the lead, make the transfer target end the conference if they
+// hang up, then kick only the VA's leg — leaving lead + target connected.
+// Participant.update({ status }) is NOT a valid Twilio API; use .remove() to kick.
 router.post('/complete-transfer', requireAuth, async (req, res) => {
   const { call_log_id } = req.body || {};
   const callLog = getCallLog(call_log_id);
@@ -261,7 +275,22 @@ router.post('/complete-transfer', requireAuth, async (req, res) => {
 
   try {
     const conferenceSid = await getConferenceSid(callLog);
-    await getClient().conferences(conferenceSid).participants(callLog.agent_call_sid).update({ status: 'completed' });
+    const conf = getClient().conferences(conferenceSid);
+
+    // Connect lead + target before VA drops (lead was held for the consult brief).
+    if (callLog.lead_call_sid) {
+      await conf.participants(callLog.lead_call_sid).update({ hold: false, muted: false }).catch((err) => {
+        logError('twilio', `Complete-transfer unhold lead failed for #${call_log_id}: ${err.message}`, { callLogId: call_log_id });
+      });
+    }
+    // After VA leaves, target hangup should tear down the conference for the lead too.
+    if (callLog.transfer_call_sid) {
+      await conf.participants(callLog.transfer_call_sid).update({ endConferenceOnExit: true }).catch((err) => {
+        logError('twilio', `Complete-transfer set target endConferenceOnExit failed for #${call_log_id}: ${err.message}`, { callLogId: call_log_id });
+      });
+    }
+
+    await conf.participants(callLog.agent_call_sid).remove();
     logInfo('twilio', `Complete-transfer: VA left call_log #${call_log_id}`, { callLogId: call_log_id });
     res.json({ ok: true });
   } catch (err) {

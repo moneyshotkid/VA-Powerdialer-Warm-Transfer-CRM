@@ -74,7 +74,8 @@ app.use((err, req, res, next) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
+const host = process.env.HOST || "127.0.0.1";
+app.listen(port, host, () => {
   // eslint-disable-next-line no-console
-  console.log(`Dialer listening on port ${port}`);
+  console.log(`Dialer listening on ${host}:${port}`);
 });

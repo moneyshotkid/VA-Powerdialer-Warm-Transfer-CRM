@@ -60,6 +60,7 @@ router.delete('/', requireAdmin, (req, res) => {
     return res.status(400).json({ error: 'Send { "confirm": "DELETE" } to confirm deleting every lead.' });
   }
   const deleteAll = db.transaction(() => {
+    db.prepare('DELETE FROM logs WHERE call_log_id IS NOT NULL').run();
     db.prepare('DELETE FROM call_logs').run();
     return db.prepare('DELETE FROM leads').run().changes;
   });
@@ -195,6 +196,7 @@ router.delete('/:id', requireAdmin, (req, res) => {
   if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
   const deleteOne = db.transaction((id) => {
+    db.prepare('DELETE FROM logs WHERE call_log_id IN (SELECT id FROM call_logs WHERE lead_id = ?)').run(id);
     db.prepare('DELETE FROM call_logs WHERE lead_id = ?').run(id);
     db.prepare('DELETE FROM leads WHERE id = ?').run(id);
   });

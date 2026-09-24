@@ -12,6 +12,7 @@ const els = {
   nextLeadBtn: document.getElementById('next-lead-btn'),
   leadEmpty: document.getElementById('lead-empty'),
   leadDetails: document.getElementById('lead-details'),
+  leadAvatar: document.getElementById('lead-avatar'),
   leadName: document.getElementById('lead-name'),
   leadCompany: document.getElementById('lead-company'),
   leadCategory: document.getElementById('lead-category'),
@@ -25,6 +26,12 @@ const els = {
   leadAssistant: document.getElementById('lead-assistant'),
   leadLinks: document.getElementById('lead-links'),
   leadNotes: document.getElementById('lead-notes'),
+  phasePill: document.getElementById('phase-pill'),
+  phaseLabel: document.getElementById('phase-label'),
+  callTimer: document.getElementById('call-timer'),
+  callIdleActions: document.getElementById('call-idle-actions'),
+  callActiveActions: document.getElementById('call-active-actions'),
+  transferGroup: document.getElementById('transfer-group'),
   callBtn: document.getElementById('call-btn'),
   muteBtn: document.getElementById('mute-btn'),
   hangupBtn: document.getElementById('hangup-btn'),
@@ -33,8 +40,16 @@ const els = {
   completeTransferBtn: document.getElementById('complete-transfer-btn'),
   callStatus: document.getElementById('call-status'),
   queueList: document.getElementById('queue-list'),
+  queueCount: document.getElementById('queue-count'),
   outcomeForm: document.getElementById('outcome-form'),
   outcomeCallLogId: document.getElementById('outcome-call-log-id'),
+};
+
+const PHASE_LABELS = {
+  idle: 'Idle',
+  connecting: 'Connecting…',
+  active: 'On Call',
+  transferring: 'Transferring',
 };
 
 const state = {
@@ -49,6 +64,9 @@ const state = {
   held: false,
   transferred: false,
   pollTimer: null,
+  phase: 'idle',
+  timerInterval: null,
+  callStartTs: null,
 };
 
 function escapeHtml(str) {
@@ -61,6 +79,12 @@ function setStatus(text) {
   els.callStatus.textContent = text || '';
 }
 
+function initials(str) {
+  const words = String(str || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return '—';
+  return words.slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+}
+
 function socialLink(url, label) {
   if (!url) return '';
   const a = document.createElement('a');
@@ -71,13 +95,53 @@ function socialLink(url, label) {
   return a;
 }
 
+// --- Call phase (drives which button groups are visible) -----------------
+
+function startTimer() {
+  clearInterval(state.timerInterval);
+  state.callStartTs = Date.now();
+  els.callTimer.hidden = false;
+  els.callTimer.textContent = '00:00';
+  state.timerInterval = setInterval(() => {
+    const secs = Math.floor((Date.now() - state.callStartTs) / 1000);
+    const m = String(Math.floor(secs / 60)).padStart(2, '0');
+    const s = String(secs % 60).padStart(2, '0');
+    els.callTimer.textContent = `${m}:${s}`;
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(state.timerInterval);
+  state.timerInterval = null;
+  els.callTimer.hidden = true;
+  els.callTimer.textContent = '00:00';
+}
+
+function setPhase(phase) {
+  state.phase = phase;
+  els.phasePill.className = `phase-pill phase-${phase}`;
+  els.phaseLabel.textContent = PHASE_LABELS[phase] || phase;
+
+  const inCall = phase !== 'idle';
+  els.callIdleActions.hidden = inCall;
+
+  // The AI Assistant (Vapi) channel drives its own call — the agent has no
+  // in-call controls to operate, so those groups never appear on that channel.
+  const showAgentControls = inCall && state.channel !== 'vapi';
+  els.callActiveActions.hidden = !showAgentControls;
+  els.transferGroup.hidden = !showAgentControls;
+
+  if (showAgentControls) {
+    const transferring = phase === 'transferring';
+    els.transferBtn.hidden = transferring;
+    els.holdBtn.hidden = !transferring;
+    els.completeTransferBtn.hidden = !transferring;
+  }
+}
+
 function resetCallControls() {
-  els.callBtn.disabled = false;
-  els.muteBtn.disabled = true;
-  els.hangupBtn.disabled = true;
-  els.transferBtn.disabled = true;
-  els.holdBtn.disabled = true;
-  els.completeTransferBtn.disabled = true;
+  setPhase('idle');
+  stopTimer();
   els.muteBtn.textContent = 'Mute';
   els.holdBtn.textContent = 'Hold Lead';
   state.muted = false;
@@ -138,10 +202,15 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
 
 async function loadQueueList() {
   const leads = await get('/api/queue?limit=25');
+  els.queueCount.textContent = leads.length >= 25 ? '25+' : String(leads.length);
   els.queueList.innerHTML = leads
     .map((l) => {
       const rating = l.rating != null ? `${l.rating}★ (${l.review_count ?? '?'})` : '';
-      return `<div class="queue-item">${escapeHtml(l.company || '(no company)')} — ${escapeHtml(l.category)} — ${escapeHtml(l.city)}${rating ? ` — ${escapeHtml(rating)}` : ''}</div>`;
+      const meta = [l.category, l.city, rating].filter(Boolean).map(escapeHtml).join(' · ');
+      return `<div class="queue-item">
+        <div class="queue-item-title">${escapeHtml(l.company || '(no company)')}</div>
+        <div class="queue-item-meta">${meta || '&mdash;'}</div>
+      </div>`;
     })
     .join('') || '<div class="hint">Queue is empty.</div>';
 }
@@ -155,11 +224,12 @@ function renderLead(lead) {
   }
   els.leadEmpty.hidden = true;
   els.leadDetails.hidden = false;
+  els.leadAvatar.textContent = initials(lead.company || lead.name);
   els.leadName.textContent = lead.name || lead.contact_person || '(no name)';
   els.leadCompany.textContent = lead.company || '';
   els.leadCategory.textContent = lead.category || '—';
   els.leadAddress.textContent = [lead.address, lead.city].filter(Boolean).join(', ') || '—';
-  els.leadPhone.textContent = lead.phone_number || '';
+  els.leadPhone.textContent = lead.phone_number || '—';
   els.leadWebsite.innerHTML = '';
   const websiteLink = lead.website ? socialLink(/^https?:\/\//i.test(lead.website) ? lead.website : `https://${lead.website}`, lead.website) : null;
   if (websiteLink) els.leadWebsite.appendChild(websiteLink);
@@ -216,8 +286,8 @@ els.nextLeadBtn.addEventListener('click', async () => {
 
 els.startAutoDialBtn.addEventListener('click', async () => {
   state.autoDialing = true;
-  els.startAutoDialBtn.disabled = true;
-  els.pauseQueueBtn.disabled = false;
+  els.startAutoDialBtn.hidden = true;
+  els.pauseQueueBtn.hidden = false;
   if (!state.currentLead) {
     const lead = await claimNextLead();
     if (lead) await startCall();
@@ -228,8 +298,8 @@ els.startAutoDialBtn.addEventListener('click', async () => {
 
 els.pauseQueueBtn.addEventListener('click', () => {
   state.autoDialing = false;
-  els.startAutoDialBtn.disabled = false;
-  els.pauseQueueBtn.disabled = true;
+  els.startAutoDialBtn.hidden = false;
+  els.pauseQueueBtn.hidden = true;
 });
 
 // --- Call setup ------------------------------------------------------------
@@ -241,7 +311,8 @@ async function startCall() {
     setStatus('No lead loaded — click Next Lead first.');
     return;
   }
-  els.callBtn.disabled = true;
+  setPhase('connecting');
+  startTimer();
   setStatus('Starting call…');
 
   try {
@@ -249,11 +320,8 @@ async function startCall() {
       const { call_log_id } = await post('/api/voice/start-vapi-call', { lead_id: state.currentLead.id });
       state.callLogId = call_log_id;
       els.outcomeCallLogId.value = call_log_id;
+      setPhase('active');
       setStatus('AI Assistant is calling…');
-      els.hangupBtn.disabled = true;
-      els.muteBtn.disabled = true;
-      els.transferBtn.disabled = true;
-      els.holdBtn.disabled = true;
       startPolling();
       return;
     }
@@ -270,23 +338,18 @@ async function startCall() {
       const call = await state.device.connect({ params: { callLogId: String(call_log_id) } });
       state.activeCall = call;
       setStatus('Connecting…');
-      call.on('accept', () => setStatus('Connected — dialing lead…'));
+      call.on('accept', () => { setPhase('active'); setStatus('Connected — dialing lead…'); });
       call.on('disconnect', () => { setStatus('Call ended.'); resetCallControls(); });
       call.on('cancel', () => { setStatus('Call canceled.'); resetCallControls(); });
       call.on('error', (err) => { setStatus(`Call error: ${err.message}`); resetCallControls(); });
-      els.muteBtn.disabled = false;
-      els.hangupBtn.disabled = false;
-      els.transferBtn.disabled = false;
     } else {
+      setPhase('active');
       setStatus('Calling your phone…');
-      els.muteBtn.disabled = false;
-      els.hangupBtn.disabled = false;
-      els.transferBtn.disabled = false;
       startPolling();
     }
   } catch (err) {
     setStatus(`Failed to start call: ${err.message}`);
-    els.callBtn.disabled = false;
+    resetCallControls();
   }
 }
 
@@ -341,12 +404,15 @@ els.transferBtn.addEventListener('click', async () => {
   els.transferBtn.disabled = true;
   try {
     const res = await post('/api/voice/transfer', { call_log_id: state.callLogId });
-    setStatus(`Warm transfer in progress — calling ${res.transferred_to}…`);
-    els.holdBtn.disabled = false;
-    els.completeTransferBtn.disabled = false;
+    // Server auto-holds the lead so VA can brief the target privately.
+    state.held = true;
+    els.holdBtn.textContent = 'Unhold Lead';
+    setStatus(`Warm transfer — lead on hold, calling ${res.transferred_to}… Brief them, Unhold Lead to connect all three, then Complete Transfer to leave.`);
+    setPhase('transferring');
     state.transferred = true;
   } catch (err) {
     setStatus(`Transfer failed: ${err.message}`);
+  } finally {
     els.transferBtn.disabled = false;
   }
 });
@@ -360,11 +426,13 @@ els.holdBtn.addEventListener('click', async () => {
 els.completeTransferBtn.addEventListener('click', async () => {
   try {
     await post('/api/voice/complete-transfer', { call_log_id: state.callLogId });
-  } finally {
-    if (state.channel === 'browser' && state.activeCall) state.activeCall.disconnect();
-    setStatus('Transfer complete — you have left the call.');
-    resetCallControls();
+    setStatus('Transfer complete — lead connected to target; you have left the call.');
+  } catch (err) {
+    setStatus(`Complete transfer failed: ${err.message}`);
+    return;
   }
+  if (state.channel === 'browser' && state.activeCall) state.activeCall.disconnect();
+  resetCallControls();
 });
 
 // --- Outcome / auto-advance -------------------------------------------
