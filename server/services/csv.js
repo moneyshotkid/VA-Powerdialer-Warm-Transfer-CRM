@@ -48,8 +48,25 @@ const BOOLEAN_COLUMNS = new Set(['is_unclaimed']);
 const TRUE_VALUES = new Set(['true', 'yes', 'y', '1', 'unclaimed']);
 const FALSE_VALUES = new Set(['false', 'no', 'n', '0', 'claimed']);
 
+// Common alternate spellings for a handful of columns, redirected to the canonical
+// COLUMN_MAP key they mean. Applied after normalization, so "Phone", "Phone Number", and
+// "phone" all resolve the same way. Add to this rather than COLUMN_MAP itself — COLUMN_MAP's
+// values also define ALL_LEAD_COLUMNS (the INSERT statement's column list), so an extra key
+// pointing at an existing column would insert that column twice and break the query.
+const HEADER_ALIASES = {
+  phone: 'phone_number',
+  telephone: 'phone_number',
+  tel: 'phone_number',
+  phone_num: 'phone_number',
+  business_name: 'company',
+  business: 'company',
+  url: 'website',
+  web: 'website',
+};
+
 function normalizeHeader(header) {
-  return header.trim().toLowerCase().replace(/\s+/g, '_');
+  const normalized = header.trim().toLowerCase().replace(/\s+/g, '_');
+  return HEADER_ALIASES[normalized] || normalized;
 }
 
 function parseBoolean(value) {

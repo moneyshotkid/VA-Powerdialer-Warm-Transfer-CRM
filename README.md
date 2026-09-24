@@ -124,13 +124,21 @@ number, phone_number, contact_person, contact_title, email, company, address, ca
 city, website, notes, name, callback_appt, assistant, rating, review_count, review_bucket,
 latest_review_age_days, is_unclaimed, maps_url, facebook, instagram, linkedin
 ```
+A few common alternate spellings are also recognized (case/whitespace-insensitive):
+`phone`/`telephone`/`tel` → `phone_number`, `business_name`/`business` → `company`,
+`url`/`web` → `website`. Anything else must match the name above exactly.
 
 **Without a header row** — check "This file has no header row" on the upload form; every row
-is treated as data and columns are matched strictly by position, in this exact order:
+is treated as data and columns are matched **strictly by position**, in this exact order:
 ```
 company, category, address, city, phone, website, email, facebook, instagram, linkedin,
 rating, review_count, review_bucket, latest_review_age_days, is_unclaimed, maps_url
 ```
+This only works if your file's actual columns are in exactly that order — if a whole
+import comes back with every row failing on the same field (e.g. a category value like
+"Graphic Design" reported as an invalid phone number), that's the signal your file's
+column order doesn't match this fixed layout; use header-row mode instead, which reads
+your actual header text and doesn't care about position at all.
 Fields outside this list (`contact_person`, `notes`, `name`, `callback_appt`, `assistant`,
 the CSV's own `number`/external id) are simply left blank for a positional import — use the
 header-row mode instead if a file needs to set those too.
