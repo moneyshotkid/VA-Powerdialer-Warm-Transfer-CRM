@@ -1,0 +1,15 @@
+# Normalize text files to LF in the repository regardless of which OS checked them in or
+# out — this codebase is edited from both Linux/Mac (LF) and Windows/WAMP (CRLF often
+# introduced by editors/tools that default to it), and without this, a save-and-commit from
+# either side turns into a full-file diff of nothing but line-ending noise, burying the real
+# change (this is exactly what happened once already — see the "production tree sync" commit).
+# Git still checks files out using each platform's native line ending if core.autocrlf is set
+# there; only what's stored in the repo (and diffed) is normalized.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.sqlite binary
