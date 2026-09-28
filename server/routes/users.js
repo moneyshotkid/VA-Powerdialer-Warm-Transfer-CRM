@@ -13,6 +13,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const USER_FIELDS = 'id, username, role, display_name, twilio_identity, phone_number, created_at';
 
+function passwordProblem(password) {
+  if (!password || String(password).length < 10) return 'password must be at least 10 characters';
+  if (password === 'admin123' || password === 'change-me-immediately') {
+    return 'That password is publicly known and cannot be used';
+  }
+  return null;
+}
+
 // All routes here are admin-only: agent identities, the "Call My Phone" number, and the
 // transfer-target / Vapi settings are all admin-controlled configuration, not something an
 // agent can self-serve.
@@ -27,6 +35,8 @@ router.post('/', (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: 'username and password are required' });
   }
+  const passwordError = passwordProblem(password);
+  if (passwordError) return res.status(400).json({ error: passwordError });
   if (role && !['admin', 'agent'].includes(role)) {
     return res.status(400).json({ error: 'role must be "admin" or "agent"' });
   }
@@ -126,6 +136,10 @@ router.put('/:id', (req, res) => {
     if (!normalizedPhone) {
       return res.status(400).json({ error: `"${phone_number}" is not a valid phone number (need E.164, e.g. +15551234567)` });
     }
+  }
+  if (password) {
+    const passwordError = passwordProblem(password);
+    if (passwordError) return res.status(400).json({ error: passwordError });
   }
 
   db.prepare(

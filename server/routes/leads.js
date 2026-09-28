@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { db } = require('../db');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, canAccessCall } = require('../middleware/auth');
 const { parseLeadsCsv, exportCallLogsCsv, exportLeadsCsv } = require('../services/csv');
 const { applyOutcome, claimNextLead } = require('../services/leads');
 const { toE164 } = require('../services/phone');
@@ -24,7 +24,7 @@ router.post('/upload', requireAdmin, upload.single('file'), (req, res) => {
   }
 });
 
-router.get('/', (req, res) => {
+router.get('/', requireAdmin, (req, res) => {
   const { status, search } = req.query;
   const clauses = [];
   const params = [];
@@ -68,7 +68,7 @@ router.delete('/', requireAdmin, (req, res) => {
   res.json({ ok: true, deleted });
 });
 
-router.get('/call-logs', (req, res) => {
+router.get('/call-logs', requireAdmin, (req, res) => {
   const rows = db
     .prepare(
       `SELECT cl.*, l.name AS lead_name, l.company, l.phone_number, u.display_name AS agent_name
@@ -91,7 +91,7 @@ router.get('/call-logs/export', requireAdmin, (req, res) => {
 
 router.get('/call-status/:call_log_id', (req, res) => {
   const row = db.prepare('SELECT * FROM call_logs WHERE id = ?').get(req.params.call_log_id);
-  if (!row) return res.status(404).json({ error: 'Call log not found' });
+  if (!row || !canAccessCall(req, row)) return res.status(404).json({ error: 'Call log not found' });
   res.json({
     id: row.id,
     channel: row.channel,
@@ -110,6 +110,8 @@ router.get('/call-status/:call_log_id', (req, res) => {
 router.post('/outcome', (req, res) => {
   const { call_log_id, ...fields } = req.body || {};
   if (!call_log_id) return res.status(400).json({ error: 'call_log_id is required' });
+  const callLog = db.prepare('SELECT * FROM call_logs WHERE id = ?').get(call_log_id);
+  if (!callLog || !canAccessCall(req, callLog)) return res.status(404).json({ error: 'Call log not found' });
 
   try {
     const { leadId } = applyOutcome(call_log_id, fields);
@@ -150,7 +152,7 @@ function coerceLeadField(field, value) {
   return String(value).trim() || null;
 }
 
-router.get('/:id', (req, res) => {
+router.get('/:id', requireAdmin, (req, res) => {
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.id);
   if (!lead) return res.status(404).json({ error: 'Lead not found' });
   res.json(lead);

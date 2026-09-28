@@ -1,4 +1,5 @@
 require('dotenv').config();
+const crypto = require('crypto');
 const path = require('path');
 const express = require('express');
 const session = require('express-session');
@@ -17,16 +18,45 @@ const capabilitiesRoutes = require('./routes/capabilities');
 const logsRoutes = require('./routes/logs');
 const { requireAuth } = require('./middleware/auth');
 
-const app = express();
-app.set('trust proxy', 1);
+const PUBLISHED_SESSION_SECRETS = new Set([
+  '',
+  'dev-secret-change-me',
+  'change-this-to-a-long-random-string',
+  'change-me-immediately',
+]);
 
-app.use(express.json());
+function resolveSessionSecret() {
+  const configured = process.env.SESSION_SECRET;
+  if (configured && !PUBLISHED_SESSION_SECRETS.has(configured)) return configured;
+  // A secret that appears in the public repo lets anyone forge a signed session cookie.
+  // MemoryStore does not put the user id in the cookie, but a known secret still enables
+  // session fixation. A process-local random secret avoids that without refusing to boot.
+  // eslint-disable-next-line no-console
+  console.error(
+    '[dialer] SESSION_SECRET is missing or a published placeholder. ' +
+      'Using a random secret for this process. Set a long random SESSION_SECRET in .env.'
+  );
+  return crypto.randomBytes(32).toString('hex');
+}
+
+const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Frame-Options', 'DENY');
+  next();
+});
+
+app.use(express.json({ limit: '100kb' }));
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || 'dev-secret-change-me',
+    secret: resolveSessionSecret(),
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'lax' },
+    // 'auto' sets Secure when the request is HTTPS (including X-Forwarded-Proto from Apache).
+    cookie: { httpOnly: true, sameSite: 'lax', secure: 'auto' },
   })
 );
 
@@ -75,7 +105,9 @@ app.use((err, req, res, next) => {
 
 const port = process.env.PORT || 3000;
 const host = process.env.HOST || "127.0.0.1";
-app.listen(port, host, () => {
+const server = app.listen(port, host, () => {
   // eslint-disable-next-line no-console
   console.log(`Dialer listening on ${host}:${port}`);
 });
+
+module.exports = { app, server };

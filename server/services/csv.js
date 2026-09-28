@@ -77,8 +77,29 @@ function parseBoolean(value) {
 }
 
 /** Trim + coerce one raw CSV cell to the type its target `leads` column expects. */
+// Excel/Sheets treat a cell starting with = + - @ as a formula. Our own export prefixes
+// those with a single quote; strip that guard on the way back in so a round-trip import
+// still parses phone numbers. A leading apostrophe that is not that guard is kept.
+function unwrapSpreadsheetGuard(raw) {
+  const value = String(raw);
+  if (value.length > 1 && value[0] === "'" && /^[=+\-@\t\r]/.test(value[1])) return value.slice(1);
+  return value;
+}
+
+function spreadsheetSafe(value) {
+  if (value == null) return '';
+  const s = String(value);
+  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+}
+
+function sanitizeRow(row) {
+  const out = {};
+  for (const [key, value] of Object.entries(row)) out[key] = spreadsheetSafe(value);
+  return out;
+}
+
 function coerceValue(column, rawValue) {
-  const raw = rawValue ? String(rawValue).trim() : '';
+  const raw = rawValue ? unwrapSpreadsheetGuard(String(rawValue).trim()) : '';
   if (!raw) return null;
   if (NUMERIC_COLUMNS.has(column)) {
     const n = Number(raw);
@@ -180,7 +201,7 @@ function exportCallLogsCsv() {
     )
     .all();
 
-  return stringify(rows, {
+  return stringify(rows.map(sanitizeRow), {
     header: true,
     columns: [
       'id', 'lead_name', 'company', 'phone_number', 'agent_name', 'channel', 'status',
@@ -225,7 +246,7 @@ function exportLeadsCsv() {
     updated_at: l.updated_at,
   }));
 
-  return stringify(mapped, {
+  return stringify(mapped.map(sanitizeRow), {
     header: true,
     columns: [
       'number', 'phone_number', 'contact_person', 'contact_title', 'email', 'company',

@@ -85,10 +85,26 @@ function initials(str) {
   return words.slice(0, 2).map((w) => w[0].toUpperCase()).join('');
 }
 
+function safeHttpUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return null;
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw.replace(/^\/+/, '')}`;
+  let parsed;
+  try {
+    parsed = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  if (!parsed.hostname) return null;
+  return parsed.href;
+}
+
 function socialLink(url, label) {
-  if (!url) return '';
+  const href = safeHttpUrl(url);
+  if (!href) return null;
   const a = document.createElement('a');
-  a.href = url;
+  a.href = href;
   a.target = '_blank';
   a.rel = 'noopener noreferrer';
   a.textContent = label;
@@ -270,7 +286,7 @@ async function claimNextLead() {
     await post('/api/queue/release', { lead_id: state.currentLead.id }).catch(() => {});
   }
 
-  const lead = await get('/api/queue/next');
+  const lead = await post('/api/queue/next');
   renderLead(lead);
   loadQueueList();
   if (!lead) {

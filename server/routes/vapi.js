@@ -1,6 +1,6 @@
 const express = require('express');
 const { db, getSetting } = require('../db');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, canDialLead } = require('../middleware/auth');
 const { applyOutcome } = require('../services/leads');
 const { toE164 } = require('../services/phone');
 const { logInfo, logWarn, logError } = require('../services/logger');
@@ -54,6 +54,9 @@ router.post('/voice/start-vapi-call', requireAuth, async (req, res) => {
 
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(lead_id);
   if (!lead) return res.status(404).json({ error: 'Lead not found' });
+  if (!canDialLead(req, lead)) {
+    return res.status(403).json({ error: 'That lead is not claimed by you.' });
+  }
 
   // Leads created before phone normalization was added (or edited outside the app) could
   // still have a non-E.164 number — catch that here with a clear error instead of letting

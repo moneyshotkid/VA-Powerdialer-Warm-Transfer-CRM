@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+
 function baseUrl() {
   return (process.env.VAPI_BASE_URL || 'https://api.vapi.ai').replace(/\/+$/, '');
 }
@@ -88,8 +90,10 @@ function createCall({ assistantId, phoneNumberId, lead, callLogId }) {
 function verifyWebhookSecret(req) {
   const expected = process.env.VAPI_SERVER_SECRET;
   if (!expected) return false;
-  const provided = req.get('x-vapi-secret');
-  return Boolean(provided) && provided === expected;
+  const provided = req.get('x-vapi-secret') || '';
+  const providedHash = crypto.createHash('sha256').update(provided).digest();
+  const expectedHash = crypto.createHash('sha256').update(expected).digest();
+  return crypto.timingSafeEqual(providedHash, expectedHash);
 }
 
 module.exports = { listAssistants, listPhoneNumbers, createCall, verifyWebhookSecret };
