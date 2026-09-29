@@ -6,10 +6,26 @@ function escapeHtml(str) {
   }[c]));
 }
 
+function safeHttpUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return null;
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw.replace(/^\/+/, '')}`;
+  let parsed;
+  try {
+    parsed = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  if (!parsed.hostname) return null;
+  return parsed.href;
+}
+
 function socialLink(url, label) {
-  if (!url) return '';
-  const href = escapeHtml(/^https?:\/\//i.test(url) ? url : `https://${url}`);
-  return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+  const href = safeHttpUrl(url);
+  const text = escapeHtml(label || href || '');
+  if (!href) return text;
+  return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
 }
 
 // --- Tabs ---------------------------------------------------------------

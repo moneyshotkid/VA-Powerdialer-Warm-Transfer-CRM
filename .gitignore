@@ -1,5 +1,7 @@
 node_modules/
 .env
+.env.*
+!.env.example
 server/data/*.sqlite
 server/data/*.sqlite-journal
 server/data/*.sqlite-wal
@@ -12,6 +14,10 @@ awstatsicons
 icon/
 index2.html
 .well-known/
+*.bak
 *.bak.*
+*.old
+*.orig
+*~
 public/js/*.bak.*
 server/routes/*.bak.*

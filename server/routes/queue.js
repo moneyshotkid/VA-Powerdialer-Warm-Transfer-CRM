@@ -26,7 +26,9 @@ router.get('/', (req, res) => {
 });
 
 // Claim and return the next lead for the logged-in agent to dial.
-router.get('/next', (req, res) => {
+// POST rather than GET: claiming changes server state, and a cross-site GET would
+// otherwise send the session cookie (SameSite=Lax) and burn a lead from the queue.
+router.post('/next', (req, res) => {
   const lead = claimNextLead(req.session.userId);
   if (!lead) return res.json(null);
   res.json(lead);

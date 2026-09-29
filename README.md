@@ -40,8 +40,12 @@ cp .env.example .env
 npm run dev
 ```
 
-The app seeds a default admin user on first boot from `ADMIN_USERNAME`/`ADMIN_PASSWORD`
-(fallback `admin`/`admin123` — **change it immediately** if you didn't set those vars).
+The app seeds an admin user on first boot only when `ADMIN_USERNAME` / `ADMIN_PASSWORD`
+are set and the password is not a published default. It will not create `admin` /
+`admin123`. Login with that password is always rejected. If a database was created by
+an older version that seeded `admin123`, set `ADMIN_PASSWORD` to a new secret and
+restart — startup replaces that hash. `SESSION_SECRET` must also be a long random
+value; the placeholders in `.env.example` are rejected.
 
 ### Twilio configuration (required for calling)
 
@@ -109,6 +113,9 @@ APIs evolve.
 
 - Sessions use an in-memory store — fine for a single-instance internal tool, but sessions
   are lost on restart and won't work across multiple server instances.
+- Login allows 10 failures per IP per 15 minutes, then returns HTTP 429.
+- `GET /api/leads`, lead export/delete, call-log export, and the call-log list are admin-only.
+  Agents claim work from `POST /api/queue/next`.
 - No real migration framework — `server/db.js` runs `CREATE TABLE IF NOT EXISTS` plus a
   hand-written list of `ALTER TABLE ADD COLUMN` calls for columns added after the initial
   release (see `LEAD_COLUMNS_V2`). A future column needs the same treatment; anything more

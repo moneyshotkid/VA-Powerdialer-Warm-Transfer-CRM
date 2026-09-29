@@ -4,9 +4,10 @@ const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 
 const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+const dbPath = process.env.DIALER_DB_PATH || path.join(dataDir, 'dialer.sqlite');
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-const db = new Database(path.join(dataDir, 'dialer.sqlite'));
+const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
@@ -131,22 +132,56 @@ for (const [column, definition] of Object.entries(LEAD_COLUMNS_V2)) {
   }
 }
 
-// Seed a default admin if no users exist yet.
+// Passwords published in this public repo. Never seed them, and never accept them at login.
+const PUBLISHED_PASSWORDS = new Set(['admin123', 'change-me-immediately']);
+
+function isPublishedPassword(password) {
+  return !password || PUBLISHED_PASSWORDS.has(password);
+}
+
+// Seed an admin only when the operator supplied a unique password. An empty users table
+// with no ADMIN_PASSWORD used to become admin/admin123, which is now public.
 const userCount = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+const adminPassword = process.env.ADMIN_PASSWORD;
 if (userCount === 0) {
-  const username = process.env.ADMIN_USERNAME || 'admin';
-  const password = process.env.ADMIN_PASSWORD || 'admin123';
-  const hash = bcrypt.hashSync(password, 10);
-  db.prepare(
-    `INSERT INTO users (username, password_hash, role, display_name, twilio_identity)
-     VALUES (?, ?, 'admin', ?, ?)`
-  ).run(username, hash, 'Admin', `agent-${username}`);
+  if (isPublishedPassword(adminPassword)) {
+    // eslint-disable-next-line no-console
+    console.error(
+      '[dialer] No users exist, and ADMIN_PASSWORD is missing or a published default. ' +
+        'Refusing to seed a guessable admin account. Set ADMIN_PASSWORD in .env and restart.'
+    );
+  } else {
+    const hash = bcrypt.hashSync(adminPassword, 10);
+    db.prepare(
+      `INSERT INTO users (username, password_hash, role, display_name, twilio_identity)
+       VALUES (?, ?, 'admin', ?, ?)`
+    ).run(adminUsername, hash, 'Admin', `agent-${adminUsername}`);
+    // eslint-disable-next-line no-console
+    console.warn(`[dialer] Seeded admin user "${adminUsername}" from ADMIN_PASSWORD.`);
+  }
+} else if (!isPublishedPassword(adminPassword)) {
+  // Databases created before this check may still have the published admin123 hash.
+  // If the operator has since put a real ADMIN_PASSWORD in the environment, rotate on boot.
+  const existing = db.prepare('SELECT * FROM users WHERE username = ?').get(adminUsername);
+  if (existing && bcrypt.compareSync('admin123', existing.password_hash)) {
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(
+      bcrypt.hashSync(adminPassword, 10),
+      existing.id
+    );
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[dialer] Replaced the published default password on "${adminUsername}" with ADMIN_PASSWORD from the environment.`
+    );
+  }
+}
+
+const defaultPasswordUser = db.prepare('SELECT username, password_hash FROM users WHERE username = ?').get(adminUsername);
+if (defaultPasswordUser && bcrypt.compareSync('admin123', defaultPasswordUser.password_hash)) {
   // eslint-disable-next-line no-console
-  console.warn(
-    `[dialer] Seeded default admin user "${username}". ` +
-      (process.env.ADMIN_PASSWORD
-        ? ''
-        : 'Using fallback password "admin123" — set ADMIN_PASSWORD in .env and change it.')
+  console.error(
+    `[dialer] CRITICAL: "${adminUsername}" still has the published default password. ` +
+      'Set ADMIN_PASSWORD in .env to a unique value and restart to rotate it.'
   );
 }
 

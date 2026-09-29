@@ -1,9 +1,9 @@
 const express = require('express');
 const twilio = require('twilio');
 const { db, getSetting } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, canAccessCall, canDialLead } = require('../middleware/auth');
 const { toE164 } = require('../services/phone');
-const { logInfo, logError } = require('../services/logger');
+const { logInfo, logWarn, logError } = require('../services/logger');
 const {
   getClient,
   baseUrl,
@@ -29,6 +29,39 @@ function validateTwilioSignature(req, res, next) {
 
 function getCallLog(id) {
   return db.prepare('SELECT * FROM call_logs WHERE id = ?').get(id);
+}
+
+function loadOwnedCall(req, res, callLogId) {
+  const callLog = getCallLog(callLogId);
+  if (!callLog) {
+    res.status(404).json({ error: 'Call log not found' });
+    return null;
+  }
+  if (!canAccessCall(req, callLog)) {
+    res.status(403).json({ error: 'Not allowed to control this call' });
+    return null;
+  }
+  return callLog;
+}
+
+// Browser SDK calls hit /outbound with whatever callLogId the client puts in device.connect().
+// Bind that to the access-token identity so one agent's token cannot join or bill another call.
+function clientIdentity(value) {
+  const raw = String(value || '');
+  const prefix = 'client:';
+  if (!raw.toLowerCase().startsWith(prefix)) return null;
+  try {
+    return decodeURIComponent(raw.slice(prefix.length));
+  } catch {
+    return raw.slice(prefix.length);
+  }
+}
+
+function browserLegMatchesAgent(body, callLog) {
+  const identity = clientIdentity(body.From) || clientIdentity(body.Caller);
+  if (!identity || !callLog.agent_id) return false;
+  const agent = db.prepare('SELECT twilio_identity FROM users WHERE id = ?').get(callLog.agent_id);
+  return Boolean(agent && agent.twilio_identity === identity);
 }
 
 async function getConferenceSid(callLog) {
@@ -80,6 +113,9 @@ router.post('/start-call', requireAuth, async (req, res) => {
 
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(lead_id);
   if (!lead) return res.status(404).json({ error: 'Lead not found' });
+  if (!canDialLead(req, lead)) {
+    return res.status(403).json({ error: 'That lead is not claimed by you.' });
+  }
 
   const agent = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
   let agentPhone = null;
@@ -124,7 +160,12 @@ router.post('/start-call', requireAuth, async (req, res) => {
 router.post('/outbound', formParser, validateTwilioSignature, async (req, res) => {
   const callLogId = req.body.callLogId;
   const callLog = callLogId && getCallLog(callLogId);
-  if (!callLog) {
+  if (!callLog || !browserLegMatchesAgent(req.body, callLog)) {
+    if (callLog) {
+      logWarn('twilio', `Rejected browser leg for call_log #${callLog.id}: token identity does not match the agent`, {
+        callLogId: callLog.id,
+      });
+    }
     const twiml = new twilio.twiml.VoiceResponse();
     twiml.say('Sorry, this call could not be connected.');
     res.type('text/xml').send(twiml.toString());
@@ -195,8 +236,8 @@ router.post('/call-status', formParser, validateTwilioSignature, async (req, res
 
 router.post('/transfer', requireAuth, async (req, res) => {
   const { call_log_id } = req.body || {};
-  const callLog = getCallLog(call_log_id);
-  if (!callLog) return res.status(404).json({ error: 'Call log not found' });
+  const callLog = loadOwnedCall(req, res, call_log_id);
+  if (!callLog) return;
 
   const rawTarget = getSetting('transfer_target_phone');
   if (!rawTarget) return res.status(400).json({ error: 'No transfer target phone number is configured.' });
@@ -234,8 +275,9 @@ router.post('/transfer', requireAuth, async (req, res) => {
 
 router.post('/hold', requireAuth, async (req, res) => {
   const { call_log_id, hold } = req.body || {};
-  const callLog = getCallLog(call_log_id);
-  if (!callLog || !callLog.lead_call_sid) return res.status(404).json({ error: 'Lead is not yet connected' });
+  const callLog = loadOwnedCall(req, res, call_log_id);
+  if (!callLog) return;
+  if (!callLog.lead_call_sid) return res.status(404).json({ error: 'Lead is not yet connected' });
 
   try {
     const conferenceSid = await getConferenceSid(callLog);
@@ -252,8 +294,9 @@ router.post('/hold', requireAuth, async (req, res) => {
 
 router.post('/mute-self', requireAuth, async (req, res) => {
   const { call_log_id, muted } = req.body || {};
-  const callLog = getCallLog(call_log_id);
-  if (!callLog || !callLog.agent_call_sid) return res.status(404).json({ error: 'Agent leg is not yet connected' });
+  const callLog = loadOwnedCall(req, res, call_log_id);
+  if (!callLog) return;
+  if (!callLog.agent_call_sid) return res.status(404).json({ error: 'Agent leg is not yet connected' });
 
   try {
     const conferenceSid = await getConferenceSid(callLog);
@@ -270,8 +313,9 @@ router.post('/mute-self', requireAuth, async (req, res) => {
 // Participant.update({ status }) is NOT a valid Twilio API; use .remove() to kick.
 router.post('/complete-transfer', requireAuth, async (req, res) => {
   const { call_log_id } = req.body || {};
-  const callLog = getCallLog(call_log_id);
-  if (!callLog || !callLog.agent_call_sid) return res.status(404).json({ error: 'Agent leg is not yet connected' });
+  const callLog = loadOwnedCall(req, res, call_log_id);
+  if (!callLog) return;
+  if (!callLog.agent_call_sid) return res.status(404).json({ error: 'Agent leg is not yet connected' });
 
   try {
     const conferenceSid = await getConferenceSid(callLog);
@@ -303,8 +347,8 @@ router.post('/complete-transfer', requireAuth, async (req, res) => {
 // end the whole conference so the lead isn't left stranded on hold.
 router.post('/hangup', requireAuth, async (req, res) => {
   const { call_log_id } = req.body || {};
-  const callLog = getCallLog(call_log_id);
-  if (!callLog) return res.status(404).json({ error: 'Call log not found' });
+  const callLog = loadOwnedCall(req, res, call_log_id);
+  if (!callLog) return;
 
   try {
     const conferenceSid = await getConferenceSid(callLog).catch(() => null);
